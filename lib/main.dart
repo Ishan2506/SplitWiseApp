@@ -4,6 +4,7 @@ import 'state/state_manager.dart';
 import 'screens/dashboard_tab.dart';
 import 'screens/groups_tab.dart';
 import 'screens/friends_tab.dart';
+import 'screens/login_screen.dart';
 
 void main() {
   runApp(
@@ -19,6 +20,7 @@ class SplitWiseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = Provider.of<StateManager>(context);
     return MaterialApp(
       title: 'Splitwise App Clone',
       debugShowCheckedModeBanner: false,
@@ -34,7 +36,7 @@ class SplitWiseApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const MainScaffold(),
+      home: state.isLoggedIn ? const MainScaffold() : const LoginScreen(),
     );
   }
 }
@@ -120,6 +122,13 @@ class _MainScaffoldState extends State<MainScaffold> {
                 },
               ),
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Color(0xFFF43F5E)),
+            tooltip: 'Logout',
+            onPressed: () {
+              state.logout();
+            },
           ),
         ],
       ),

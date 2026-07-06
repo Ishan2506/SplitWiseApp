@@ -8,6 +8,7 @@ class StateManager extends ChangeNotifier {
   final List<Payment> _payments = [];
 
   String _currentUserId = 'm1';
+  bool _isLoggedIn = false;
 
   StateManager() {
     _loadMockData();
@@ -19,11 +20,59 @@ class StateManager extends ChangeNotifier {
   List<Expense> get expenses => _expenses;
   List<Payment> get payments => _payments;
   String get currentUserId => _currentUserId;
+  bool get isLoggedIn => _isLoggedIn;
 
   Member get currentUser => _members.firstWhere((m) => m.id == _currentUserId);
 
   void setCurrentUser(String id) {
     _currentUserId = id;
+    notifyListeners();
+  }
+
+  void login(String memberId) {
+    _currentUserId = memberId;
+    _isLoggedIn = true;
+    notifyListeners();
+  }
+
+  void loginWithGoogleAccount({required String name, required String email, String? avatarUrl}) {
+    final existingIndex = _members.indexWhere((m) => m.email.toLowerCase() == email.toLowerCase());
+    
+    if (existingIndex != -1) {
+      _currentUserId = _members[existingIndex].id;
+    } else {
+      final newId = 'm${_members.length + 1}';
+      final newMember = Member(
+        id: newId,
+        name: name,
+        email: email,
+        avatarUrl: avatarUrl ?? 'https://api.dicebear.com/7.x/initials/svg?seed=$name',
+      );
+      _members.add(newMember);
+      _currentUserId = newId;
+
+      // Automatically add new member to mock groups for testing
+      for (var i = 0; i < _groups.length; i++) {
+        final g = _groups[i];
+        if (!g.memberIds.contains(newId)) {
+          final updatedIds = List<String>.from(g.memberIds)..add(newId);
+          _groups[i] = Group(
+            id: g.id,
+            name: g.name,
+            description: g.description,
+            memberIds: updatedIds,
+            category: g.category,
+          );
+        }
+      }
+    }
+    
+    _isLoggedIn = true;
+    notifyListeners();
+  }
+
+  void logout() {
+    _isLoggedIn = false;
     notifyListeners();
   }
 
