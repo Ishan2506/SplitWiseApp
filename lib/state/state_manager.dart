@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
+import '../model/user_model.dart';
+import '../network/api_service.dart';
 
 class StateManager extends ChangeNotifier {
   final List<Member> _members = [];
@@ -9,9 +12,75 @@ class StateManager extends ChangeNotifier {
 
   String _currentUserId = 'm1';
   bool _isLoggedIn = false;
+  String? _authErrorMessage;
+  UserModel? _currentUserModel;
 
   StateManager() {
     _loadMockData();
+    _initializeSession();
+  }
+
+  String? get authErrorMessage => _authErrorMessage;
+  UserModel? get currentUserModel => _currentUserModel;
+
+  Future<void> _initializeSession() async {
+    await ApiService.init();
+    final result = await ApiService.getMe();
+    if (result['success'] == true) {
+      final user = result['user'] as UserModel;
+      _currentUserModel = user;
+      _updateOrAddUserModel(user);
+      _currentUserId = user.id;
+      _isLoggedIn = true;
+      notifyListeners();
+    }
+  }
+
+  void _updateOrAddUserModel(UserModel user) {
+    final idx = _members.indexWhere((m) => m.id == user.id);
+    final member = Member(
+      id: user.id,
+      name: user.name,
+      email: user.email ?? '',
+      avatarUrl: user.avatarUrl.isNotEmpty
+          ? user.avatarUrl
+          : 'https://api.dicebear.com/7.x/initials/svg?seed=${user.name}',
+    );
+    if (idx != -1) {
+      _members[idx] = member;
+    } else {
+      _members.add(member);
+    }
+  }
+
+  Future<bool> loginWithIdentifierAndPassword({
+    required String identifier,
+    required String password,
+  }) async {
+    _authErrorMessage = null;
+    final result = await ApiService.login(
+      identifier: identifier,
+      password: password,
+    );
+    if (result['success'] == true) {
+      final user = result['user'] as UserModel;
+      _currentUserModel = user;
+      _updateOrAddUserModel(user);
+      _currentUserId = user.id;
+      _isLoggedIn = true;
+      notifyListeners();
+      return true;
+    } else {
+      _authErrorMessage = result['message'];
+      notifyListeners();
+      return false;
+    }
+  }
+
+  void bypassLogin() {
+    _currentUserId = 'm1';
+    _isLoggedIn = true;
+    notifyListeners();
   }
 
   // Getters
@@ -71,9 +140,45 @@ class StateManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void logout() {
+  Future<void> logout() async {
+    await ApiService.clearToken();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    _currentUserModel = null;
     _isLoggedIn = false;
     notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> updateProfile({
+    String? name,
+    String? email,
+    String? mobileNumber,
+    String? avatarUrl,
+    String? preferredCurrency,
+    String? language,
+    bool? emailNotifications,
+    bool? pushNotifications,
+    String? password,
+  }) async {
+    final result = await ApiService.updateProfile(
+      name: name,
+      email: email,
+      mobileNumber: mobileNumber,
+      avatarUrl: avatarUrl,
+      preferredCurrency: preferredCurrency,
+      language: language,
+      emailNotifications: emailNotifications,
+      pushNotifications: pushNotifications,
+      password: password,
+    );
+
+    if (result['success'] == true) {
+      final user = result['user'] as UserModel;
+      _currentUserModel = user;
+      _updateOrAddUserModel(user);
+      notifyListeners();
+    }
+    return result;
   }
 
   // Prepopulate mock data

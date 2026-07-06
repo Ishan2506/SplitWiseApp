@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../state/state_manager.dart';
-import 'signup_screen.dart';
+import 'package:flutter/services.dart';
+import '../network/api_service.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+class SignupScreen extends StatefulWidget {
+  const SignupScreen({Key? key}) : super(key: key);
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _identifierController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _mobileController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _isAuthenticating = false;
@@ -20,20 +21,27 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _identifierController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    _mobileController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _handlePasswordLogin(StateManager state) async {
+  Future<void> _handleSignup() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final email = _emailController.text.trim();
+    final mobile = _mobileController.text.trim();
 
     setState(() {
       _isAuthenticating = true;
     });
 
-    final success = await state.loginWithIdentifierAndPassword(
-      identifier: _identifierController.text.trim(),
+    final result = await ApiService.register(
+      name: _nameController.text.trim(),
+      email: email.isNotEmpty ? email : null,
+      mobileNumber: mobile.isNotEmpty ? mobile : null,
       password: _passwordController.text,
     );
 
@@ -42,18 +50,19 @@ class _LoginScreenState extends State<LoginScreen> {
         _isAuthenticating = false;
       });
 
-      if (success) {
+      if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
+            content: Text('Account created successfully! Please login.'),
             backgroundColor: Color(0xFF0D9488),
-            content: Text('Logged in successfully!'),
           ),
         );
+        Navigator.pop(context); // Go back to login
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            content: Text(result['message'] ?? 'Registration failed'),
             backgroundColor: Colors.redAccent,
-            content: Text(state.authErrorMessage ?? 'Invalid credentials'),
           ),
         );
       }
@@ -62,10 +71,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<StateManager>(context);
-
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -78,40 +93,16 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Form(
                 key: _formKey,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Brand Logo
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0D9488),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF0D9488).withOpacity(0.4),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.account_balance_wallet,
-                          size: 48,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // App Title
+                    // Title
                     const Text(
-                      'SplitWise Premium',
+                      'Create Account',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 32,
@@ -121,19 +112,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-
-                    // Subtitle
                     const Text(
-                      'Split bills, share experiences, 100% ad-free.',
+                      'Join SplitWise Premium and start splitting bills.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 16,
                         color: Color(0xFF94A3B8),
                       ),
                     ),
                     const SizedBox(height: 32),
 
-                    // Input Fields Card
+                    // Inputs Card
                     Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
@@ -143,11 +132,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       child: Column(
                         children: [
+                          // Name Field
                           TextFormField(
-                            controller: _identifierController,
+                            controller: _nameController,
                             style: const TextStyle(color: Colors.white),
                             decoration: InputDecoration(
-                              labelText: 'Email or Mobile Number',
+                              labelText: 'Full Name',
                               labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
                               prefixIcon: const Icon(Icons.person, color: Color(0xFF0D9488)),
                               enabledBorder: UnderlineInputBorder(
@@ -157,21 +147,78 @@ class _LoginScreenState extends State<LoginScreen> {
                                 borderSide: BorderSide(color: Color(0xFF0D9488)),
                               ),
                             ),
-                             validator: (val) {
+                            validator: (val) {
                               if (val == null || val.trim().isEmpty) {
-                                return 'Please enter your email or mobile number';
-                              }
-                              final input = val.trim();
-                              final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-                              final mobileRegex = RegExp(r'^[6-9]\d{9}$');
-                              
-                              if (!emailRegex.hasMatch(input) && !mobileRegex.hasMatch(input)) {
-                                return 'Enter a valid email or 10-digit mobile number (starts with 6-9)';
+                                return 'Please enter your name';
                               }
                               return null;
                             },
                           ),
                           const SizedBox(height: 16),
+
+                          // Email Field
+                          TextFormField(
+                            controller: _emailController,
+                            style: const TextStyle(color: Colors.white),
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: InputDecoration(
+                              labelText: 'Email Address (Optional)',
+                              labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                              prefixIcon: const Icon(Icons.email, color: Color(0xFF0D9488)),
+                              enabledBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+                              ),
+                              focusedBorder: const UnderlineInputBorder(
+                                borderSide: BorderSide(color: Color(0xFF0D9488)),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val != null && val.isNotEmpty) {
+                                final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                                if (!emailRegex.hasMatch(val.trim())) {
+                                  return 'Enter a valid email address';
+                                }
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Mobile Field
+                          TextFormField(
+                            controller: _mobileController,
+                            style: const TextStyle(color: Colors.white),
+                            keyboardType: TextInputType.phone,
+                            maxLength: 10,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: InputDecoration(
+                              labelText: 'Mobile Number',
+                              counterText: '',
+                              labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                              prefixIcon: const Icon(Icons.phone, color: Color(0xFF0D9488)),
+                              enabledBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+                              ),
+                              focusedBorder: const UnderlineInputBorder(
+                                borderSide: BorderSide(color: Color(0xFF0D9488)),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return 'Please enter your mobile number';
+                              }
+                              final reg = RegExp(r'^[6-9]\d{9}$');
+                              if (!reg.hasMatch(val.trim())) {
+                                return 'Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Password Field
                           TextFormField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
@@ -199,8 +246,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
+                              if (val == null || val.isEmpty) {
                                 return 'Please enter your password';
+                              }
+                              if (val.length < 8) {
+                                return 'Password must be at least 8 characters';
+                              }
+                              final reg = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$');
+                              if (!reg.hasMatch(val)) {
+                                return 'Must contain 1 uppercase, 1 lowercase, 1 digit & 1 special char';
                               }
                               return null;
                             },
@@ -208,14 +262,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 32),
 
-                    // Login Button
+                    // Submit Button
                     if (_isAuthenticating)
                       const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)))
                     else
                       ElevatedButton(
-                        onPressed: () => _handlePasswordLogin(state),
+                        onPressed: _handleSignup,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF0D9488),
                           foregroundColor: Colors.white,
@@ -224,29 +278,24 @@ class _LoginScreenState extends State<LoginScreen> {
                           elevation: 4,
                         ),
                         child: const Text(
-                          'Login',
+                          'Sign Up',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
 
-                    // Sign up navigation
+                    // Navigation to Login
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Text(
-                          "Don't have an account? ",
+                          'Already have an account? ',
                           style: TextStyle(color: Color(0xFF94A3B8)),
                         ),
                         TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const SignupScreen()),
-                            );
-                          },
+                          onPressed: () => Navigator.pop(context),
                           child: const Text(
-                            'Sign Up',
+                            'Login',
                             style: TextStyle(
                               color: Color(0xFF0D9488),
                               fontWeight: FontWeight.bold,
@@ -254,22 +303,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ],
-                    ),
-                    
-                    const Divider(color: Colors.white24, height: 32),
-
-                    // Bypass/Mock login option for offline testing
-                    TextButton(
-                      onPressed: () {
-                        state.bypassLogin();
-                      },
-                      child: const Text(
-                        'Offline Demo Mode (Use Mock Data)',
-                        style: TextStyle(
-                          color: Color(0xFF94A3B8),
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
                     ),
                   ],
                 ),

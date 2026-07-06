@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../state/state_manager.dart';
+import '../../state/state_manager.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -157,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 borderSide: BorderSide(color: Color(0xFF0D9488)),
                               ),
                             ),
-                             validator: (val) {
+                            validator: (val) {
                               if (val == null || val.trim().isEmpty) {
                                 return 'Please enter your email or mobile number';
                               }
