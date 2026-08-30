@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'state/state_manager.dart';
-import 'state/group_provider.dart';
+import 'screen/splash_screen.dart';
 import 'screen/Dashboard/dashboard_screen.dart';
 import 'screen/authentication/login_screen.dart';
 import 'screen/groups/invite_link_handler.dart';
@@ -34,7 +34,6 @@ class SplitWiseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<StateManager>(context);
     return MaterialApp(
       navigatorKey: appNavigatorKey,
       title: 'Splitwise App Clone',
@@ -50,11 +49,12 @@ class SplitWiseApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      // Watches for `splitwise://join/<code>` and https invite links, and opens
-      // the join screen once the user is signed in.
-      home: InviteLinkHandler(
-        child: state.isLoggedIn ? const DashboardScreen() : const LoginScreen(),
-      ),
+      // Show splash screen first while initializing session
+      home: const SplashScreen(),
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/dashboard': (context) => const DashboardScreen(),
+      },
     );
   }
 }

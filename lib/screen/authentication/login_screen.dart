@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../state/state_manager.dart';
+import '../../screen/Dashboard/dashboard_screen.dart';
 import 'signup_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -44,6 +47,16 @@ class _LoginScreenState extends State<LoginScreen> {
             content: Text('Logged in with Google!'),
           ),
         );
+        // Navigate to Dashboard after successful Google login
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const DashboardScreen()),
+              (route) => false,
+            );
+          }
+        });
       } else if (state.authErrorMessage != null) {
         // Only show an error if it wasn't a plain user cancellation.
         ScaffoldMessenger.of(context).showSnackBar(
@@ -80,6 +93,16 @@ class _LoginScreenState extends State<LoginScreen> {
             content: Text('Logged in successfully!'),
           ),
         );
+        // Navigate to Dashboard after successful login
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const DashboardScreen()),
+              (route) => false,
+            );
+          }
+        });
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -177,10 +200,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           TextFormField(
                             controller: _identifierController,
                             style: const TextStyle(color: Colors.white),
+                            keyboardType: TextInputType.emailAddress,
+                            maxLength: 100,
+                            inputFormatters: [
+                              // Allow only email-safe characters and digits
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[a-zA-Z0-9@._\-]'),
+                              ),
+                            ],
                             decoration: InputDecoration(
                               labelText: 'Email or Mobile Number',
                               labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
                               prefixIcon: const Icon(Icons.person, color: Color(0xFF0D9488)),
+                              hintText: 'e.g. user@example.com or 9876543210',
+                              hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                              counterText: '', // Hide the character counter
                               enabledBorder: UnderlineInputBorder(
                                 borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
                               ),
@@ -193,11 +227,27 @@ class _LoginScreenState extends State<LoginScreen> {
                                 return 'Please enter your email or mobile number';
                               }
                               final input = val.trim();
-                              final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+
+                              // Email validation: must contain @ and match email pattern
+                              final emailRegex = RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9._%-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$');
+
+                              // Mobile validation: exactly 10 digits, starts with 6-9
                               final mobileRegex = RegExp(r'^[6-9]\d{9}$');
-                              
-                              if (!emailRegex.hasMatch(input) && !mobileRegex.hasMatch(input)) {
-                                return 'Enter a valid email or 10-digit mobile number (starts with 6-9)';
+
+                              // Check if it looks like an email (contains @)
+                              if (input.contains('@')) {
+                                if (!emailRegex.hasMatch(input)) {
+                                  return 'Please enter a valid email address';
+                                }
+                                return null;
+                              }
+
+                              // Otherwise, must be exactly 10 digits and valid mobile
+                              if (input.length != 10) {
+                                return 'Mobile number must be exactly 10 digits';
+                              }
+                              if (!mobileRegex.hasMatch(input)) {
+                                return 'Mobile number must start with 6, 7, 8, or 9';
                               }
                               return null;
                             },
@@ -235,6 +285,25 @@ class _LoginScreenState extends State<LoginScreen> {
                               }
                               return null;
                             },
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+                                );
+                              },
+                              child: const Text(
+                                'Forgot Password?',
+                                style: TextStyle(
+                                  color: Color(0xFF14B8A6),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),

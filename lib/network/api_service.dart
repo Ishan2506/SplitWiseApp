@@ -164,6 +164,75 @@ class ApiService {
     }
   }
 
+  // Forgot password
+  static Future<Map<String, dynamic>> forgotPassword({
+    required String email,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/forgot-password'),
+        headers: _getHeaders(),
+        body: jsonEncode({'email': email}),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'Reset link sent'};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Failed to send reset link'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  // Verify reset token
+  static Future<Map<String, dynamic>> verifyResetToken({
+    required String email,
+    required String token,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/verify-reset-token'),
+        headers: _getHeaders(),
+        body: jsonEncode({'email': email, 'token': token}),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Invalid reset token'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  // Reset password
+  static Future<Map<String, dynamic>> resetPassword({
+    required String email,
+    required String token,
+    required String password,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/reset-password'),
+        headers: _getHeaders(),
+        body: jsonEncode({'email': email, 'token': token, 'password': password}),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'Password reset successful'};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Failed to reset password'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
   // Update user profile
   static Future<Map<String, dynamic>> updateProfile({
     String? name,

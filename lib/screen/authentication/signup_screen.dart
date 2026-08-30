@@ -57,7 +57,8 @@ class _SignupScreenState extends State<SignupScreen> {
             backgroundColor: Color(0xFF0D9488),
           ),
         );
-        Navigator.pop(context); // Go back to login
+        // Go back to login screen - user must login to properly initialize StateManager
+        Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -161,10 +162,17 @@ class _SignupScreenState extends State<SignupScreen> {
                             controller: _emailController,
                             style: const TextStyle(color: Colors.white),
                             keyboardType: TextInputType.emailAddress,
+                            maxLength: 100,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[a-zA-Z0-9@._\-]'),
+                              ),
+                            ],
                             decoration: InputDecoration(
                               labelText: 'Email Address (Optional)',
                               labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
                               prefixIcon: const Icon(Icons.email, color: Color(0xFF0D9488)),
+                              counterText: '',
                               enabledBorder: UnderlineInputBorder(
                                 borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
                               ),
@@ -174,7 +182,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             ),
                             validator: (val) {
                               if (val != null && val.isNotEmpty) {
-                                final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                                final emailRegex = RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9._%-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$');
                                 if (!emailRegex.hasMatch(val.trim())) {
                                   return 'Enter a valid email address';
                                 }
@@ -194,10 +202,12 @@ class _SignupScreenState extends State<SignupScreen> {
                               FilteringTextInputFormatter.digitsOnly,
                             ],
                             decoration: InputDecoration(
-                              labelText: 'Mobile Number',
+                              labelText: 'Mobile Number (Optional)',
                               counterText: '',
                               labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
                               prefixIcon: const Icon(Icons.phone, color: Color(0xFF0D9488)),
+                              hintText: '10 digits, e.g. 9876543210',
+                              hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
                               enabledBorder: UnderlineInputBorder(
                                 borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
                               ),
@@ -206,12 +216,20 @@ class _SignupScreenState extends State<SignupScreen> {
                               ),
                             ),
                             validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
-                                return 'Please enter your mobile number';
-                              }
-                              final reg = RegExp(r'^[6-9]\d{9}$');
-                              if (!reg.hasMatch(val.trim())) {
-                                return 'Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9';
+                              if (val != null && val.isNotEmpty) {
+                                final reg = RegExp(r'^[6-9]\d{9}$');
+                                if (val.length != 10) {
+                                  return 'Mobile number must be exactly 10 digits';
+                                }
+                                if (!reg.hasMatch(val.trim())) {
+                                  return 'Mobile number must start with 6, 7, 8, or 9';
+                                }
+                              } else {
+                                // If mobile is empty, email must be provided
+                                final email = _emailController.text.trim();
+                                if (email.isEmpty) {
+                                  return 'Please provide either email or mobile number';
+                                }
                               }
                               return null;
                             },
