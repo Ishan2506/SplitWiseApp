@@ -1,4 +1,4 @@
-package com.example.splitwise_app
+package com.bondbyte.paisasplit
 
 import io.flutter.embedding.android.FlutterActivity
 

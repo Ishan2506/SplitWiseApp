@@ -5,10 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../model/user_model.dart';
 
 class ApiService {
-  // Use 10.0.2.2 for Android emulator, localhost for iOS/web/desktop
+  // Physical Android phone: use the PC's LAN IP (phone + PC on same Wi-Fi).
+  // Emulator would use 10.0.2.2; web/desktop uses localhost.
   static const String baseUrl = kIsWeb
       ? 'http://localhost:5000/api'
-      : 'http://10.0.2.2:5000/api'; // Or change to your local machine IP if testing on real device
+      : 'http://192.168.31.106:5000/api';
 
   static String? _token;
 
@@ -106,6 +107,33 @@ class ApiService {
         return {'success': true, 'user': UserModel.fromJson(data['user'])};
       } else {
         return {'success': false, 'message': data['message'] ?? 'Login failed'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  // Login / sign up with Google.
+  // Sends the Google idToken to the backend, which verifies it and returns our JWT.
+  static Future<Map<String, dynamic>> googleLogin({
+    required String idToken,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/google'),
+        headers: _getHeaders(),
+        body: jsonEncode({'idToken': idToken}),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final token = data['token'];
+        if (token != null) {
+          await _saveToken(token);
+        }
+        return {'success': true, 'user': UserModel.fromJson(data['user'])};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Google login failed'};
       }
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};

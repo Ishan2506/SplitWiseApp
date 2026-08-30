@@ -25,6 +25,37 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  Future<void> _handleGoogleLogin(StateManager state) async {
+    setState(() {
+      _isAuthenticating = true;
+    });
+
+    final success = await state.signInWithGoogle();
+
+    if (mounted) {
+      setState(() {
+        _isAuthenticating = false;
+      });
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF0D9488),
+            content: Text('Logged in with Google!'),
+          ),
+        );
+      } else if (state.authErrorMessage != null) {
+        // Only show an error if it wasn't a plain user cancellation.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text(state.authErrorMessage!),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _handlePasswordLogin(StateManager state) async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -228,6 +259,43 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
+                    const SizedBox(height: 16),
+
+                    // "or" divider
+                    Row(
+                      children: const [
+                        Expanded(child: Divider(color: Colors.white24)),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('OR', style: TextStyle(color: Color(0xFF94A3B8))),
+                        ),
+                        Expanded(child: Divider(color: Colors.white24)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Google Sign-In button
+                    OutlinedButton.icon(
+                      onPressed: _isAuthenticating ? null : () => _handleGoogleLogin(state),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF1E293B),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: BorderSide.none,
+                      ),
+                      icon: Image.network(
+                        'https://developers.google.com/identity/images/g-logo.png',
+                        height: 22,
+                        width: 22,
+                        errorBuilder: (_, __, ___) =>
+                            const Icon(Icons.login, color: Color(0xFF0D9488), size: 22),
+                      ),
+                      label: const Text(
+                        'Continue with Google',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Sign up navigation

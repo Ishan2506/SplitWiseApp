@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../model/user_model.dart';
@@ -104,43 +105,73 @@ class StateManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void loginWithGoogleAccount({required String name, required String email, String? avatarUrl}) {
-    final existingIndex = _members.indexWhere((m) => m.email.toLowerCase() == email.toLowerCase());
-    
-    if (existingIndex != -1) {
-      _currentUserId = _members[existingIndex].id;
-    } else {
-      final newId = 'm${_members.length + 1}';
-      final newMember = Member(
-        id: newId,
-        name: name,
-        email: email,
-        avatarUrl: avatarUrl ?? 'https://api.dicebear.com/7.x/initials/svg?seed=$name',
-      );
-      _members.add(newMember);
-      _currentUserId = newId;
+  // Real Google Sign-In: gets an idToken from Google, sends it to the backend,
+  // and logs in with the JWT the backend returns.
+  //
+  // serverClientId must be the *Web* OAuth client ID (same value as the
+  // backend's GOOGLE_CLIENT_IDS) so Google issues an idToken your server can verify.
+  static const String _googleServerClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+    // Web OAuth client ID (the audience the backend verifies against).
+    defaultValue:
+        '1057268747729-secn2jv99cbflfvv2p6f2eea0f85n6c6.apps.googleusercontent.com',
+  );
 
-      // Automatically add new member to mock groups for testing
-      for (var i = 0; i < _groups.length; i++) {
-        final g = _groups[i];
-        if (!g.memberIds.contains(newId)) {
-          final updatedIds = List<String>.from(g.memberIds)..add(newId);
-          _groups[i] = Group(
-            id: g.id,
-            name: g.name,
-            description: g.description,
-            memberIds: updatedIds,
-            category: g.category,
-          );
-        }
+  Future<bool> signInWithGoogle() async {
+    _authErrorMessage = null;
+
+    try {
+      final googleSignIn = GoogleSignIn(
+        scopes: const ['email', 'profile'],
+        serverClientId: _googleServerClientId.isEmpty ? null : _googleServerClientId,
+      );
+
+      // Make sure any previous session is cleared so the account picker shows.
+      await googleSignIn.signOut();
+
+      final account = await googleSignIn.signIn();
+      if (account == null) {
+        // User cancelled the picker.
+        _authErrorMessage = null;
+        return false;
       }
+
+      final auth = await account.authentication;
+      final idToken = auth.idToken;
+      if (idToken == null) {
+        _authErrorMessage =
+            'Could not get Google ID token. Check the serverClientId configuration.';
+        notifyListeners();
+        return false;
+      }
+
+      final result = await ApiService.googleLogin(idToken: idToken);
+      if (result['success'] == true) {
+        final user = result['user'] as UserModel;
+        _currentUserModel = user;
+        _updateOrAddUserModel(user);
+        _currentUserId = user.id;
+        _isLoggedIn = true;
+        notifyListeners();
+        return true;
+      } else {
+        _authErrorMessage = result['message'];
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _authErrorMessage = 'Google sign-in failed: $e';
+      notifyListeners();
+      return false;
     }
-    
-    _isLoggedIn = true;
-    notifyListeners();
   }
 
   Future<void> logout() async {
+    try {
+      await GoogleSignIn().signOut();
+    } catch (_) {
+      // Ignore — user may not have logged in via Google.
+    }
     await ApiService.clearToken();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
