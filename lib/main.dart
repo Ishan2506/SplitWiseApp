@@ -1,25 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'state/state_manager.dart';
+import 'state/group_provider.dart';
 import 'screen/Dashboard/dashboard_screen.dart';
 import 'screen/authentication/login_screen.dart';
+import 'screen/groups/invite_link_handler.dart';
 
 void main() {
+  final stateManager = StateManager();
+  final groupProvider = GroupProvider()
+    // Keep the legacy expense/settle-up screens pointed at the real groups.
+    ..onGroupsChanged = stateManager.syncGroupsFromApi;
+
+  // Signing out must not leave the next user looking at someone else's groups.
+  stateManager.onSignedOut = groupProvider.reset;
+
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => StateManager(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: stateManager),
+        ChangeNotifierProvider.value(value: groupProvider),
+      ],
       child: const SplitWiseApp(),
     ),
   );
 }
 
+/// Lets the deep-link handler push the join screen from anywhere in the app.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 class SplitWiseApp extends StatelessWidget {
-  const SplitWiseApp({Key? key}) : super(key: key);
+  const SplitWiseApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     final state = Provider.of<StateManager>(context);
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: 'Splitwise App Clone',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -29,13 +46,15 @@ class SplitWiseApp extends StatelessWidget {
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFF0D9488),
           secondary: Color(0xFF14B8A6),
-          background: Color(0xFF0F172A),
           surface: Color(0xFF1E293B),
         ),
         useMaterial3: true,
       ),
-      home: state.isLoggedIn ? const DashboardScreen() : const LoginScreen(),
+      // Watches for `splitwise://join/<code>` and https invite links, and opens
+      // the join screen once the user is signed in.
+      home: InviteLinkHandler(
+        child: state.isLoggedIn ? const DashboardScreen() : const LoginScreen(),
+      ),
     );
   }
 }
-

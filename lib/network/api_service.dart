@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../model/group_model.dart';
 import '../model/user_model.dart';
 
 class ApiService {
@@ -199,6 +200,357 @@ class ApiService {
       } else {
         return {'success': false, 'message': data['message'] ?? 'Profile update failed'};
       }
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Groups
+  // ---------------------------------------------------------------------------
+
+  // Decodes a response body, tolerating an empty or non-JSON payload.
+  static Map<String, dynamic> _decode(http.Response response) {
+    if (response.body.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static bool _ok(int status) => status >= 200 && status < 300;
+
+  // Runs a group request and returns either the parsed group or a message.
+  static Future<Map<String, dynamic>> _groupRequest(
+    Future<http.Response> Function() send, {
+    String fallbackError = 'Request failed',
+  }) async {
+    try {
+      final response = await send();
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {
+          'success': true,
+          if (data['group'] != null)
+            'group': GroupModel.fromJson(Map<String, dynamic>.from(data['group'])),
+          'message': ?data['message'],
+          'joined': ?data['joined'],
+          'added': ?data['added'],
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? fallbackError,
+        'statusCode': response.statusCode,
+        if (data['limitExceeded'] == true) 'limitExceeded': true,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /groups — every group the signed-in user belongs to.
+  static Future<Map<String, dynamic>> getGroups({String? type}) async {
+    try {
+      final uri = Uri.parse(
+        '$baseUrl/groups${type != null ? '?type=$type' : ''}',
+      );
+      final response = await http.get(uri, headers: _getHeaders());
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        final groups = (data['groups'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(GroupModel.fromJson)
+            .toList();
+        return {'success': true, 'groups': groups};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Could not load groups'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /groups/:id
+  static Future<Map<String, dynamic>> getGroup(String groupId) =>
+      _groupRequest(
+        () => http.get(Uri.parse('$baseUrl/groups/$groupId'),
+            headers: _getHeaders()),
+        fallbackError: 'Could not load group',
+      );
+
+  /// POST /groups
+  static Future<Map<String, dynamic>> createGroup({
+    required String name,
+    String description = '',
+    required GroupType type,
+    String photoUrl = '',
+    double balanceLimit = 0,
+    String? currency,
+    List<String> memberIds = const [],
+  }) =>
+      _groupRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/groups'),
+          headers: _getHeaders(),
+          body: jsonEncode({
+            'name': name,
+            'description': description,
+            'type': type.wireValue,
+            'photoUrl': photoUrl,
+            'balanceLimit': balanceLimit,
+            'currency': ?currency,
+            'memberIds': memberIds,
+          }),
+        ),
+        fallbackError: 'Could not create the group',
+      );
+
+  /// PATCH /groups/:id — only the fields provided are changed.
+  static Future<Map<String, dynamic>> updateGroup({
+    required String groupId,
+    String? name,
+    String? description,
+    GroupType? type,
+    String? photoUrl,
+    double? balanceLimit,
+    String? currency,
+  }) =>
+      _groupRequest(
+        () => http.patch(
+          Uri.parse('$baseUrl/groups/$groupId'),
+          headers: _getHeaders(),
+          body: jsonEncode({
+            'name': ?name,
+            'description': ?description,
+            if (type != null) 'type': type.wireValue,
+            'photoUrl': ?photoUrl,
+            'balanceLimit': ?balanceLimit,
+            'currency': ?currency,
+          }),
+        ),
+        fallbackError: 'Could not update the group',
+      );
+
+  /// DELETE /groups/:id
+  static Future<Map<String, dynamic>> deleteGroup(String groupId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/groups/$groupId'),
+        headers: _getHeaders(),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'message': data['message'] ?? 'Group deleted'};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Could not delete the group'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /groups/:id/balances
+  static Future<Map<String, dynamic>> getGroupBalances(String groupId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/groups/$groupId/balances'),
+        headers: _getHeaders(),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'balances': GroupBalances.fromJson(data)};
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not load balances',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// POST /groups/:id/members — add someone who already has an account.
+  static Future<Map<String, dynamic>> addGroupMember({
+    required String groupId,
+    String? userId,
+    String? email,
+    String? mobileNumber,
+  }) =>
+      _groupRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/groups/$groupId/members'),
+          headers: _getHeaders(),
+          body: jsonEncode({
+            'userId': ?userId,
+            'email': ?email,
+            'mobileNumber': ?mobileNumber,
+          }),
+        ),
+        fallbackError: 'Could not add the member',
+      );
+
+  /// DELETE /groups/:id/members/:userId — remove a member, or leave the group.
+  static Future<Map<String, dynamic>> removeGroupMember({
+    required String groupId,
+    required String userId,
+  }) =>
+      _groupRequest(
+        () => http.delete(
+          Uri.parse('$baseUrl/groups/$groupId/members/$userId'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not remove the member',
+      );
+
+  /// POST /groups/:id/invites — invite by email or mobile. People who already
+  /// have an account are added immediately; everyone else becomes a pending
+  /// invite until they join through the link or QR code.
+  static Future<Map<String, dynamic>> inviteToGroup({
+    required String groupId,
+    String? email,
+    String? mobileNumber,
+  }) =>
+      _groupRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/groups/$groupId/invites'),
+          headers: _getHeaders(),
+          body: jsonEncode({
+            'email': ?email,
+            'mobileNumber': ?mobileNumber,
+          }),
+        ),
+        fallbackError: 'Could not send the invite',
+      );
+
+  /// DELETE /groups/:id/invites/:inviteId
+  static Future<Map<String, dynamic>> revokeInvite({
+    required String groupId,
+    required String inviteId,
+  }) =>
+      _groupRequest(
+        () => http.delete(
+          Uri.parse('$baseUrl/groups/$groupId/invites/$inviteId'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not revoke the invite',
+      );
+
+  // Shared handling for the three endpoints that return an invite payload.
+  static Future<Map<String, dynamic>> _inviteRequest(
+    Future<http.Response> Function() send,
+    String fallbackError,
+  ) async {
+    try {
+      final response = await send();
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {
+          'success': true,
+          'invite': GroupInvite.fromJson(Map<String, dynamic>.from(data['invite'])),
+        };
+      }
+      return {'success': false, 'message': data['message'] ?? fallbackError};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /groups/:id/invite — the current code, link and QR payload.
+  static Future<Map<String, dynamic>> getGroupInvite(String groupId) =>
+      _inviteRequest(
+        () => http.get(Uri.parse('$baseUrl/groups/$groupId/invite'),
+            headers: _getHeaders()),
+        'Could not load the invite',
+      );
+
+  /// POST /groups/:id/invite/rotate — issue a fresh code, invalidating the old
+  /// link and QR image.
+  static Future<Map<String, dynamic>> rotateGroupInvite(
+    String groupId, {
+    int? expiresInHours,
+  }) =>
+      _inviteRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/groups/$groupId/invite/rotate'),
+          headers: _getHeaders(),
+          body: jsonEncode({
+            'expiresInHours': ?expiresInHours,
+          }),
+        ),
+        'Could not regenerate the invite code',
+      );
+
+  /// PATCH /groups/:id/invite — turn joining on or off, or set an expiry.
+  static Future<Map<String, dynamic>> setInviteEnabled({
+    required String groupId,
+    bool? enabled,
+    int? expiresInHours,
+    bool clearExpiry = false,
+  }) =>
+      _inviteRequest(
+        () => http.patch(
+          Uri.parse('$baseUrl/groups/$groupId/invite'),
+          headers: _getHeaders(),
+          body: jsonEncode({
+            'enabled': ?enabled,
+            // An explicit null clears the expiry; omitting the key leaves it.
+            if (clearExpiry)
+              'expiresInHours': null
+            else
+              'expiresInHours': ?expiresInHours,
+          }),
+        ),
+        'Could not update the invite settings',
+      );
+
+  /// GET /groups/join/:code — what the group looks like before joining.
+  static Future<Map<String, dynamic>> previewInvite(String code) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/groups/join/$code'),
+        headers: _getHeaders(),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'preview': InvitePreview.fromJson(data)};
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'This invite could not be found',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// POST /groups/join — redeem an invite code from a link or a QR scan.
+  static Future<Map<String, dynamic>> joinGroupByCode(String code) =>
+      _groupRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/groups/join'),
+          headers: _getHeaders(),
+          body: jsonEncode({'code': code}),
+        ),
+        fallbackError: 'Could not join the group',
+      );
+
+  /// GET /users?search= — used when picking members to add.
+  static Future<Map<String, dynamic>> searchUsers({String? search}) async {
+    try {
+      final uri = Uri.parse(
+        '$baseUrl/users${search != null && search.isNotEmpty ? '?search=${Uri.encodeQueryComponent(search)}' : ''}',
+      );
+      final response = await http.get(uri, headers: _getHeaders());
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        final users = (data['users'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(GroupMember.fromJson)
+            .toList();
+        return {'success': true, 'users': users};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Could not load users'};
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }

@@ -1,4 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Scanning group invite QR codes. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Talking to the API. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- The QR scanner needs a camera but the app still works without one. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
     <application
         android:label="PaisaSplit"
         android:name="${applicationName}"
@@ -24,6 +32,33 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- splitwise://join/<CODE> — invite links shared from the app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="splitwise" android:host="join"/>
+            </intent-filter>
+
+            <!-- http://<dev-server>/join/<CODE> — the link behind every group
+                 QR code while developing. It must match INVITE_BASE_URL in the
+                 server's .env; update both together if the LAN IP changes.
+
+                 Note there is no android:autoVerify here: Android only verifies
+                 https hosts that serve /.well-known/assetlinks.json, so this
+                 opens a chooser rather than jumping straight into the app. Once
+                 you have a real domain, switch the scheme to https, point the
+                 host at it, serve assetlinks.json, and add autoVerify="true". -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="http"
+                      android:host="192.168.31.106"
+                      android:port="5000"
+                      android:pathPrefix="/join"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

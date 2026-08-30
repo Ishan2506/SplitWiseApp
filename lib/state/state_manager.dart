@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
+import '../model/group_model.dart';
 import '../model/user_model.dart';
 import '../network/api_service.dart';
 
@@ -20,6 +21,10 @@ class StateManager extends ChangeNotifier {
     _loadMockData();
     _initializeSession();
   }
+
+  /// Invoked on sign-out so other providers can clear their own state.
+  /// Wired up in `main.dart`.
+  void Function()? onSignedOut;
 
   String? get authErrorMessage => _authErrorMessage;
   UserModel? get currentUserModel => _currentUserModel;
@@ -177,6 +182,7 @@ class StateManager extends ChangeNotifier {
     await prefs.clear();
     _currentUserModel = null;
     _isLoggedIn = false;
+    onSignedOut?.call();
     notifyListeners();
   }
 
@@ -335,6 +341,51 @@ class StateManager extends ChangeNotifier {
       category: category,
     );
     _groups.add(group);
+    notifyListeners();
+  }
+
+  /// Mirrors the real groups fetched from the API into the legacy [Group] and
+  /// [Member] lists.
+  ///
+  /// Groups themselves are served by `GroupProvider` now, but the expense and
+  /// settle-up screens still work against these local models. Keeping the two
+  /// in step means those screens offer the user's actual groups and the people
+  /// really in them, rather than the seeded sample data.
+  void syncGroupsFromApi(List<GroupModel> apiGroups) {
+    _groups
+      ..clear()
+      ..addAll(
+        apiGroups.map(
+          (g) => Group(
+            id: g.id,
+            name: g.name,
+            description: g.description,
+            memberIds: g.members.map((m) => m.id).toList(),
+            category: g.type.label,
+          ),
+        ),
+      );
+
+    // Add anyone we have not seen before, so member lookups never throw.
+    for (final apiGroup in apiGroups) {
+      for (final member in apiGroup.members) {
+        final idx = _members.indexWhere((m) => m.id == member.id);
+        final mapped = Member(
+          id: member.id,
+          name: member.id == _currentUserId ? 'You' : member.name,
+          email: member.email ?? '',
+          avatarUrl: member.avatarUrl.isNotEmpty
+              ? member.avatarUrl
+              : 'https://api.dicebear.com/7.x/initials/svg?seed=${member.name}',
+        );
+        if (idx == -1) {
+          _members.add(mapped);
+        } else {
+          _members[idx] = mapped;
+        }
+      }
+    }
+
     notifyListeners();
   }
 
