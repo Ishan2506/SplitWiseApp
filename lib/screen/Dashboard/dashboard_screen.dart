@@ -22,14 +22,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
     const FriendsTab(),
   ];
 
+  Future<bool> _onWillPop() async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text('Exit App?', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Are you sure you want to exit the app?',
+            style: TextStyle(color: Color(0xFF94A3B8)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel', style: TextStyle(color: Color(0xFF0D9488))),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Exit', style: TextStyle(color: Color(0xFFF43F5E))),
+            ),
+          ],
+        );
+      },
+    ) ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = Provider.of<StateManager>(context);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        final shouldPop = await _onWillPop();
+        if (context.mounted && shouldPop) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
+        automaticallyImplyLeading: false,
         title: Row(
           children: [
             Container(
@@ -98,6 +134,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             label: 'Friends',
           ),
         ],
+      ),
       ),
     );
   }

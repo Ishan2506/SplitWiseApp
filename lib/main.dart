@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'state/state_manager.dart';
+import 'state/group_provider.dart';
 import 'screen/splash_screen.dart';
 import 'screen/Dashboard/dashboard_screen.dart';
 import 'screen/authentication/login_screen.dart';

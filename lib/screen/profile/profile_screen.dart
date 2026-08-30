@@ -16,14 +16,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _emailController;
   late TextEditingController _mobileController;
   late TextEditingController _avatarController;
-  final _passwordController = TextEditingController();
 
   String _preferredCurrency = 'INR';
   String _language = 'en';
   bool _emailNotifications = true;
   bool _pushNotifications = true;
   bool _isSaving = false;
-  bool _obscurePassword = true;
 
   @override
   void initState() {
@@ -47,7 +45,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _emailController.dispose();
     _mobileController.dispose();
     _avatarController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
@@ -68,7 +65,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       language: _language,
       emailNotifications: _emailNotifications,
       pushNotifications: _pushNotifications,
-      password: _passwordController.text.isNotEmpty ? _passwordController.text : null,
     );
 
     if (mounted) {
@@ -83,7 +79,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             backgroundColor: Color(0xFF0D9488),
           ),
         );
-        _passwordController.clear();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -261,34 +256,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ]),
                   const SizedBox(height: 24),
 
-                  // Change Password Card
-                  _buildSectionTitle('Security'),
-                  _buildCard([
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: _buildInputDecoration('New Password (Optional)', Icons.lock).copyWith(
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                            color: const Color(0xFF94A3B8),
-                          ),
-                          onPressed: () {
-                            setState(() => _obscurePassword = !_obscurePassword);
-                          },
-                        ),
-                      ),
-                      validator: (val) {
-                        if (val != null && val.isNotEmpty) {
-                          if (val.length < 8) return 'Password must be at least 8 characters';
-                          final reg = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$');
-                          if (!reg.hasMatch(val)) return 'Must contain 1 uppercase, 1 lowercase, 1 digit & 1 special char';
-                        }
-                        return null;
-                      },
+                  // Password Reset Info
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
                     ),
-                  ]),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info, color: Colors.blue, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'To change your password, use the "Forgot Password" option on the login screen.',
+                            style: TextStyle(color: Colors.blue.shade300, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 32),
 
                   // Save Profile Button

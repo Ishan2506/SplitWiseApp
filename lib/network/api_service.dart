@@ -9,8 +9,8 @@ class ApiService {
   // Physical Android phone: use the PC's LAN IP (phone + PC on same Wi-Fi).
   // Emulator would use 10.0.2.2; web/desktop uses localhost.
   static const String baseUrl = kIsWeb
-      ? 'http://localhost:5000/api'
-      : 'http://192.168.31.106:5000/api';
+      ? 'http://103.212.121.139:7000/api' //http://localhost:5000/api
+      : 'http://103.212.121.139:7000/api';
 
   static String? _token;
 
