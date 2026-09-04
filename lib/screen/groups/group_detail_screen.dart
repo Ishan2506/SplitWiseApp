@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../model/group_model.dart';
 import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
+import '../../theme/app_theme.dart';
+import '../../utils/app_constants.dart';
 import 'create_group_screen.dart';
 import 'group_members_screen.dart';
 import 'group_widgets.dart';
@@ -34,27 +36,25 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete this group?',
-            style: TextStyle(color: Colors.white)),
+        backgroundColor: Theme.of(context).cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+        title: Text('Delete this group?',
+            style: Theme.of(context).textTheme.titleLarge),
         content: Text(
           'Every expense and settlement in "${group.name}" will be deleted too. '
           'This cannot be undone.',
-          style: const TextStyle(color: GroupColors.muted),
+          style: TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: GroupColors.muted)),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: ElevatedButton.styleFrom(
-                backgroundColor: GroupColors.negative),
-            child:
-                const Text('Delete', style: TextStyle(color: Colors.white)),
+                backgroundColor: AppColors.error),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -82,14 +82,20 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
     if (group == null) {
       return Scaffold(
-        backgroundColor: const Color(0xFF0E0E10),
+        backgroundColor: AppColors.bgSecondary,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF1A1A1E),
-          iconTheme: const IconThemeData(color: Colors.white),
+          backgroundColor: AppColors.bgSecondary,
+          elevation: 0,
+          iconTheme: const IconThemeData(color: AppColors.textPrimary),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            color: AppColors.textPrimary,
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
-        body: const Center(
+        body: Center(
           child: Text('This group is no longer available',
-              style: TextStyle(color: GroupColors.muted)),
+              style: TextStyle(color: AppColors.textSecondary)),
         ),
       );
     }
@@ -101,17 +107,23 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final symbol = group.currencySymbol;
 
     return Scaffold(
-      backgroundColor: GroupColors.background,
+      backgroundColor: AppColors.bgSecondary,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1A1E),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: AppColors.bgSecondary,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          color: AppColors.textPrimary,
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Text(group.name,
             style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold)),
+                color: AppColors.textPrimary, fontWeight: FontWeight.w800)),
         actions: [
           IconButton(
             tooltip: 'Invite people',
-            icon: const Icon(Icons.person_add_alt_1, color: Color(0xFFEE2B6C)),
+            icon: const Icon(Icons.person_add_alt_1, color: AppColors.primaryAccent),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -120,7 +132,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           ),
           if (isCreator)
             PopupMenuButton<String>(
-              color: GroupColors.surface,
+              color: const Color(0xFF1A1A1E),
               icon: const Icon(Icons.more_vert, color: Colors.white),
               onSelected: (value) {
                 if (value == 'edit') {
@@ -151,10 +163,10 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   child: Row(
                     children: [
                       Icon(Icons.delete_outline,
-                          size: 18, color: GroupColors.negative),
+                          size: 18, color: const Color(0xFFD92553)),
                       SizedBox(width: 10),
                       Text('Delete group',
-                          style: TextStyle(color: GroupColors.negative)),
+                          style: TextStyle(color: const Color(0xFFD92553))),
                     ],
                   ),
                 ),
@@ -163,8 +175,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         ],
       ),
       body: RefreshIndicator(
-        color: const Color(0xFFEE2B6C),
-        backgroundColor: const Color(0xFF1A1A1E),
+        color: AppColors.primaryAccent,
+        backgroundColor: AppColors.bgPrimary,
         onRefresh: () => provider.refreshGroup(group.id),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(
@@ -192,7 +204,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: GroupColors.surface,
+        color: const Color(0xFF1A1A1E),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -218,32 +230,32 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   Text(
                     group.description,
                     style: const TextStyle(
-                        color: GroupColors.muted, fontSize: 13, height: 1.4),
+                        color: Color(0xFFCCBBA8), fontSize: 13, height: 1.4),
                   ),
                 ],
                 const SizedBox(height: 10),
                 Row(
                   children: [
                     const Icon(Icons.people_outline,
-                        size: 14, color: GroupColors.muted),
+                        size: 14, color: Color(0xFFCCBBA8)),
                     const SizedBox(width: 5),
                     Text(
                       '${group.members.length} '
                       '${group.members.length == 1 ? 'member' : 'members'}',
                       style: const TextStyle(
-                          color: GroupColors.muted, fontSize: 12),
+                          color: Color(0xFFCCBBA8), fontSize: 12),
                     ),
                     if (group.createdByName.isNotEmpty) ...[
                       const SizedBox(width: 12),
                       const Text('•',
-                          style: TextStyle(color: GroupColors.muted)),
+                          style: TextStyle(color: Color(0xFFCCBBA8))),
                       const SizedBox(width: 12),
                       Flexible(
                         child: Text(
                           'by ${group.createdByName}',
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                              color: GroupColors.muted, fontSize: 12),
+                              color: Color(0xFFCCBBA8), fontSize: 12),
                         ),
                       ),
                     ],
@@ -261,15 +273,15 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       GroupModel group, double userBalance, String symbol) {
     final settled = userBalance.abs() < 0.01;
     final color = settled
-        ? GroupColors.muted
+        ? AppColors.textSecondary
         : userBalance > 0
-            ? GroupColors.positive
-            : GroupColors.negative;
+            ? const Color(0xFF1D7A4C)
+            : const Color(0xFFD92553);
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: GroupColors.surface,
+        color: const Color(0xFF1A1A1E),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
@@ -291,7 +303,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               children: [
                 const Text('Your balance in this group',
                     style:
-                        TextStyle(color: GroupColors.muted, fontSize: 12)),
+                        TextStyle(color: Color(0xFFCCBBA8), fontSize: 12)),
                 const SizedBox(height: 4),
                 Text(
                   settled
@@ -325,7 +337,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: GroupColors.surface,
+        color: const Color(0xFF1A1A1E),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -333,7 +345,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.speed, size: 18, color: GroupColors.accent),
+              const Icon(Icons.speed, size: 18, color: AppColors.primaryAccent),
               const SizedBox(width: 8),
               const Text(
                 'Group balance limit',
@@ -346,7 +358,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               Text(
                 '$symbol${group.balanceLimit.toStringAsFixed(0)} per member',
                 style: const TextStyle(
-                    color: GroupColors.accent,
+                    color: AppColors.primaryAccent,
                     fontSize: 12,
                     fontWeight: FontWeight.w600),
               ),
@@ -355,7 +367,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           const SizedBox(height: 6),
           const Text(
             'New expenses are blocked once a member would owe more than this.',
-            style: TextStyle(color: GroupColors.muted, fontSize: 11),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
           ),
           const SizedBox(height: 14),
           BalanceLimitBar(
@@ -369,13 +381,13 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: GroupColors.negative.withValues(alpha: 0.12),
+                color: const Color(0xFFD92553).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
                 children: [
                   const Icon(Icons.warning_amber_rounded,
-                      size: 18, color: GroupColors.negative),
+                      size: 18, color: const Color(0xFFD92553)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -383,7 +395,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                           ? '${overLimit.first.name} is over the limit'
                           : '${overLimit.length} members are over the limit',
                       style: const TextStyle(
-                          color: GroupColors.negative, fontSize: 12),
+                          color: const Color(0xFFD92553), fontSize: 12),
                     ),
                   ),
                 ],
@@ -400,86 +412,92 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Members',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold),
-            ),
-            TextButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => GroupMembersScreen(groupId: group.id),
-                ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Members',
+                style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700),
               ),
-              child: const Text('Manage',
-                  style: TextStyle(color: GroupColors.accent, fontSize: 13)),
-            ),
-          ],
+              GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => GroupMembersScreen(groupId: group.id),
+                  ),
+                ),
+                child: Text('Manage',
+                    style: TextStyle(
+                        color: AppColors.primaryAccent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 4),
-        SizedBox(
-          height: 96,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            itemCount: group.members.length,
-            itemBuilder: (_, index) {
+        const SizedBox(height: AppSpacing.lg),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Row(
+            children: List.generate(group.members.length, (index) {
               final member = group.members[index];
               final balance = balances.balanceFor(member.id);
               final isSelf = member.id == currentUserId;
               final settled = balance.abs() < 0.01;
 
               return Container(
-                width: 92,
-                margin: const EdgeInsets.only(right: 10),
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                width: 85,
+                margin: const EdgeInsets.only(right: AppSpacing.md),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: GroupColors.surface,
-                  borderRadius: BorderRadius.circular(14),
+                  color: AppColors.bgPrimary,
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    MemberAvatar(member: member, radius: 18),
-                    const SizedBox(height: 6),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Text(
-                        isSelf ? 'You' : member.name.split(' ').first,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold),
-                      ),
+                    MemberAvatar(member: member, radius: 16),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      isSelf ? 'You' : member.name.split(' ').first,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       settled
                           ? 'settled'
                           : balance > 0
-                              ? '+$symbol${balance.abs().toStringAsFixed(0)}'
-                              : '-$symbol${balance.abs().toStringAsFixed(0)}',
+                              ? '+${balance.abs().toStringAsFixed(0)}'
+                              : '-${balance.abs().toStringAsFixed(0)}',
                       style: TextStyle(
                         color: settled
-                            ? GroupColors.muted
+                            ? AppColors.muted
                             : balance > 0
-                                ? GroupColors.positive
-                                : GroupColors.negative,
-                        fontSize: 11,
+                                ? const Color(0xFF1D7A4C)
+                                : const Color(0xFFD92553),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
               );
-            },
+            }),
           ),
         ),
       ],
@@ -505,17 +523,17 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: GroupColors.surface,
+              color: const Color(0xFF1A1A1E),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Row(
               children: [
                 Icon(Icons.check_circle_outline,
-                    color: GroupColors.positive, size: 20),
+                    color: const Color(0xFF1D7A4C), size: 20),
                 SizedBox(width: 12),
                 Text('Everyone is settled up in this group.',
                     style: TextStyle(
-                        color: GroupColors.muted, fontSize: 13)),
+                        color: AppColors.textSecondary, fontSize: 13)),
               ],
             ),
           )
@@ -528,11 +546,11 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: GroupColors.surface,
+                color: const Color(0xFF1A1A1E),
                 borderRadius: BorderRadius.circular(12),
                 border: involvesMe
                     ? Border.all(
-                        color: GroupColors.primary.withValues(alpha: 0.5))
+                        color: AppColors.primaryAccent.withValues(alpha: 0.5))
                     : null,
               ),
               child: Row(
@@ -551,7 +569,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                           ),
                           const TextSpan(
                             text: '  →  ',
-                            style: TextStyle(color: GroupColors.muted),
+                            style: TextStyle(color: AppColors.textSecondary),
                           ),
                           TextSpan(
                             text:
@@ -569,8 +587,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     '$symbol${s.amount.toStringAsFixed(2)}',
                     style: TextStyle(
                       color: s.toId == currentUserId
-                          ? GroupColors.positive
-                          : GroupColors.negative,
+                          ? const Color(0xFF1D7A4C)
+                          : const Color(0xFFD92553),
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),

@@ -1,18 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/state_manager.dart';
+import '../state/group_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_constants.dart';
+import 'groups/group_detail_screen.dart';
 
-class DashboardTab extends StatelessWidget {
+class DashboardTab extends StatefulWidget {
   const DashboardTab({Key? key}) : super(key: key);
 
   @override
+  State<DashboardTab> createState() => _DashboardTabState();
+}
+
+class _DashboardTabState extends State<DashboardTab> {
+  @override
+  void initState() {
+    super.initState();
+    // Fetch groups from backend API when dashboard loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Provider.of<GroupProvider>(context, listen: false).loadGroups();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final state = Provider.of<StateManager>(context);
-    final currentUserId = state.currentUserId;
-    final totalOwed = state.getUserTotalOwed(currentUserId);
-    final totalOwe = state.getUserTotalOwe(currentUserId);
+    final stateManager = Provider.of<StateManager>(context);
+    final groupProvider = Provider.of<GroupProvider>(context);
+
+    final currentUserId = stateManager.currentUserId;
+    final totalOwed = stateManager.getUserTotalOwed(currentUserId);
+    final totalOwe = stateManager.getUserTotalOwe(currentUserId);
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -28,7 +48,7 @@ class DashboardTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Hi ${state.currentUser.name.split(' ').first}',
+                    'Hi ${stateManager.currentUser.name.split(' ').first}',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -137,7 +157,7 @@ class DashboardTab extends StatelessWidget {
             const SizedBox(height: AppSpacing.xxl),
 
             // Groups List
-            if (state.groups.isNotEmpty)
+            if (groupProvider.groups.isNotEmpty)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -170,22 +190,29 @@ class DashboardTab extends StatelessWidget {
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: state.groups.length,
+                    itemCount: groupProvider.groups.length,
                     itemBuilder: (context, index) {
-                      final group = state.groups[index];
-                      final categoryLabel = group.category.isNotEmpty
-                          ? group.category.substring(0, 3).toUpperCase()
-                          : 'GRP';
+                      final group = groupProvider.groups[index];
+                      final categoryLabel = group.type.name.substring(0, 3).toUpperCase();
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: AppSpacing.lg),
-                        decoration: BoxDecoration(
-                          color: AppColors.bgPrimary,
-                          borderRadius: BorderRadius.circular(AppRadius.md),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        padding: const EdgeInsets.all(AppSpacing.lg),
-                        child: Row(
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => GroupDetailScreen(groupId: group.id),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgPrimary,
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          padding: const EdgeInsets.all(AppSpacing.lg),
+                          child: Row(
                           children: [
                             // Category Label
                             Container(
@@ -228,7 +255,7 @@ class DashboardTab extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    '${group.memberIds.length} members · ${state.expenses.where((e) => e.groupId == group.id).length} expenses',
+                                    '${group.members.length} members · 0 expenses',
                                     style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
@@ -264,6 +291,7 @@ class DashboardTab extends StatelessWidget {
                               ],
                             ),
                           ],
+                        ),
                         ),
                       );
                     },

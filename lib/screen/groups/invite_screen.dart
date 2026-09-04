@@ -173,7 +173,14 @@ class _InviteScreenState extends State<InviteScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<GroupProvider>();
-    final group = provider.groupById(widget.groupId);
+    final stateManager = context.watch<StateManager>();
+
+    // Try to find group in GroupProvider first, then fall back to StateManager
+    final group = provider.groupById(widget.groupId) ??
+        stateManager.groups.firstWhere(
+          (g) => g.id == widget.groupId,
+          orElse: () => null as dynamic,
+        ) as GroupModel?;
 
     if (group == null) {
       return const Scaffold(
@@ -195,6 +202,11 @@ class _InviteScreenState extends State<InviteScreen> {
         backgroundColor: const Color(0xFF0E0E10),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+          color: Colors.white,
+        ),
         title: Text('Invite members',
             style: const TextStyle(
               color: Colors.white,
@@ -202,6 +214,22 @@ class _InviteScreenState extends State<InviteScreen> {
               fontWeight: FontWeight.w700,
             )),
         centerTitle: false,
+        actions: [
+          TextButton(
+            onPressed: () {
+              // Go back to Dashboard
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
+            child: const Text(
+              'Done',
+              style: TextStyle(
+                color: AppColors.primaryAccent,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
       body: ListView(
         physics: const BouncingScrollPhysics(),

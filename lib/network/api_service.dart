@@ -186,6 +186,25 @@ class ApiService {
     }
   }
 
+  // Get list of all users for group member selection
+  static Future<Map<String, dynamic>> getUsers() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users'),
+        headers: _getHeaders(),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'users': data['users'] ?? []};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Failed to fetch users'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
   // Verify reset token
   static Future<Map<String, dynamic>> verifyResetToken({
     required String email,

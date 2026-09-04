@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/models.dart';
+import '../../model/group_model.dart';
+import '../../network/api_service.dart';
+import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
 import '../../widgets/common_widgets.dart';
+import 'invite_screen.dart';
 
 class CreateGroupScreen extends StatefulWidget {
   final String? existingGroupId;
@@ -39,11 +43,32 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     _loadAvailableUsers();
   }
 
-  void _loadAvailableUsers() {
-    final state = Provider.of<StateManager>(context, listen: false);
-    _availableUsers = state.members
-        .where((m) => m.id != state.currentUserId)
-        .toList();
+  Future<void> _loadAvailableUsers() async {
+    try {
+      final state = Provider.of<StateManager>(context, listen: false);
+
+      // Fetch real users from backend API
+      final result = await ApiService.getUsers();
+
+      if (result['success'] == true && result['users'] != null) {
+        final users = List<Map<String, dynamic>>.from(result['users']);
+
+        // Convert to Member objects and filter out current user
+        _availableUsers = users
+            .where((u) => u['_id'] != state.currentUserId)
+            .map((u) => Member(
+              id: u['_id'] ?? '',
+              name: u['name'] ?? 'Unknown',
+              email: u['email'] ?? '',
+              avatarUrl: u['avatarUrl'] ?? '',
+            ))
+            .toList();
+
+        if (mounted) setState(() {});
+      }
+    } catch (e) {
+      debugPrint('Error loading users: $e');
+    }
   }
 
   Future<void> _createGroup() async {
@@ -51,32 +76,48 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
 
     setState(() => _isLoading = true);
 
-    final state = Provider.of<StateManager>(context, listen: false);
     final groupName = _groupNameController.text.trim();
-    final memberIds = [
-      state.currentUserId,
-      ..._selectedMembers.entries
-          .where((e) => e.value)
-          .map((e) => e.key)
-          .toList()
-    ];
+    final memberIds = _selectedMembers.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
 
     try {
-      state.addGroup(
-        groupName,
-        _selectedCategory,
-        memberIds,
-        _selectedCategory,
+      // Convert category string to GroupType enum
+      final groupType = GroupTypeInfo.fromWire(_selectedCategory.toLowerCase());
+
+      // Call backend API to create group
+      final result = await ApiService.createGroup(
+        name: groupName,
+        description: _selectedCategory,
+        type: groupType,
+        memberIds: memberIds,
       );
 
-      if (mounted) {
+      if (!mounted) return;
+
+      if (result['success'] == true && result['group'] != null) {
+        final createdGroup = result['group'] as GroupModel;
+
+        // Group created successfully - refresh GroupProvider
+        await Provider.of<GroupProvider>(context, listen: false).loadGroups(silent: true);
+
+        // Navigate to invite screen to show QR code
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => InviteScreen(groupId: createdGroup.id),
+            ),
+          );
+        }
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: AppColors.primaryAccent,
-            content: Text('Group created successfully!'),
+          SnackBar(
+            backgroundColor: AppColors.error,
+            content: Text(result['message'] ?? 'Failed to create group'),
           ),
         );
-        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
