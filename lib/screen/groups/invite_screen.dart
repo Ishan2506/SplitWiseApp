@@ -7,6 +7,8 @@ import 'package:share_plus/share_plus.dart';
 import '../../model/group_model.dart';
 import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
+import '../../theme/app_theme.dart';
+import '../../utils/app_constants.dart';
 import 'group_widgets.dart';
 
 /// Everything needed to get someone into a group: a scannable QR code, a
@@ -65,7 +67,7 @@ class _InviteScreenState extends State<InviteScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: GroupColors.surface,
+        backgroundColor: const Color(0xFF1A1A1E),
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Generate a new code?',
@@ -175,7 +177,7 @@ class _InviteScreenState extends State<InviteScreen> {
 
     if (group == null) {
       return const Scaffold(
-        backgroundColor: GroupColors.background,
+        backgroundColor: const Color(0xFF0E0E10),
         body: Center(
           child: Text('This group is no longer available',
               style: TextStyle(color: GroupColors.muted)),
@@ -188,13 +190,18 @@ class _InviteScreenState extends State<InviteScreen> {
     final invite = group.invite;
 
     return Scaffold(
-      backgroundColor: GroupColors.background,
+      backgroundColor: const Color(0xFF0E0E10),
       appBar: AppBar(
-        backgroundColor: GroupColors.surface,
+        backgroundColor: const Color(0xFF0E0E10),
+        elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Invite to group',
-            style:
-                TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text('Invite members',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            )),
+        centerTitle: false,
       ),
       body: ListView(
         physics: const BouncingScrollPhysics(),
@@ -362,7 +369,7 @@ class _InviteScreenState extends State<InviteScreen> {
                   Text(
                     invite.code,
                     style: const TextStyle(
-                      color: GroupColors.accent,
+                      color: const Color(0xFFEE2B6C),
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 4,
@@ -428,8 +435,8 @@ class _InviteScreenState extends State<InviteScreen> {
                   icon: const Icon(Icons.copy, size: 18),
                   label: const Text('Copy'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: GroupColors.accent,
-                    side: const BorderSide(color: GroupColors.primary),
+                    foregroundColor: const Color(0xFFEE2B6C),
+                    side: const BorderSide(color: Color(0xFFEE2B6C)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
@@ -443,7 +450,7 @@ class _InviteScreenState extends State<InviteScreen> {
                   icon: const Icon(Icons.share, size: 18),
                   label: const Text('Share'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: GroupColors.primary,
+                    backgroundColor: const Color(0xFFEE2B6C),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
@@ -559,7 +566,7 @@ class _InviteScreenState extends State<InviteScreen> {
                 child: ElevatedButton(
                   onPressed: _sendingInvite ? null : () => _sendInvite(group),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: GroupColors.primary,
+                    backgroundColor: const Color(0xFFEE2B6C),
                     disabledBackgroundColor: GroupColors.surfaceAlt,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),

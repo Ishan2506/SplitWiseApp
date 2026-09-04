@@ -34,7 +34,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: GroupColors.surface,
+        backgroundColor: const Color(0xFF1A1A1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete this group?',
             style: TextStyle(color: Colors.white)),
@@ -82,9 +82,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
     if (group == null) {
       return Scaffold(
-        backgroundColor: GroupColors.background,
+        backgroundColor: const Color(0xFF0E0E10),
         appBar: AppBar(
-          backgroundColor: GroupColors.surface,
+          backgroundColor: const Color(0xFF1A1A1E),
           iconTheme: const IconThemeData(color: Colors.white),
         ),
         body: const Center(
@@ -103,7 +103,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     return Scaffold(
       backgroundColor: GroupColors.background,
       appBar: AppBar(
-        backgroundColor: GroupColors.surface,
+        backgroundColor: const Color(0xFF1A1A1E),
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(group.name,
             style: const TextStyle(
@@ -111,7 +111,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         actions: [
           IconButton(
             tooltip: 'Invite people',
-            icon: const Icon(Icons.person_add_alt_1, color: GroupColors.accent),
+            icon: const Icon(Icons.person_add_alt_1, color: Color(0xFFEE2B6C)),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -127,7 +127,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => CreateGroupScreen(existing: group),
+                      builder: (_) => CreateGroupScreen(existingGroupId: group.id),
                     ),
                   );
                 } else if (value == 'delete') {
@@ -139,7 +139,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   value: 'edit',
                   child: Row(
                     children: [
-                      Icon(Icons.edit, size: 18, color: GroupColors.accent),
+                      Icon(Icons.edit, size: 18, color: Color(0xFFEE2B6C)),
                       SizedBox(width: 10),
                       Text('Edit group',
                           style: TextStyle(color: Colors.white)),
@@ -163,8 +163,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         ],
       ),
       body: RefreshIndicator(
-        color: GroupColors.primary,
-        backgroundColor: GroupColors.surface,
+        color: const Color(0xFFEE2B6C),
+        backgroundColor: const Color(0xFF1A1A1E),
         onRefresh: () => provider.refreshGroup(group.id),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(

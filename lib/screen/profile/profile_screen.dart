@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../state/state_manager.dart';
+import '../../theme/app_theme.dart';
+import '../../utils/app_constants.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -11,366 +12,481 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _nameController;
-  late TextEditingController _emailController;
-  late TextEditingController _mobileController;
-  late TextEditingController _avatarController;
-
-  String _preferredCurrency = 'INR';
-  String _language = 'en';
-  bool _emailNotifications = true;
-  bool _pushNotifications = true;
-  bool _isSaving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final state = Provider.of<StateManager>(context, listen: false);
-    final user = state.currentUserModel;
-
-    _nameController = TextEditingController(text: user?.name ?? '');
-    _emailController = TextEditingController(text: user?.email ?? '');
-    _mobileController = TextEditingController(text: user?.mobileNumber ?? '');
-    _avatarController = TextEditingController(text: user?.avatarUrl ?? '');
-    _preferredCurrency = user?.preferredCurrency ?? 'INR';
-    _language = user?.language ?? 'en';
-    _emailNotifications = user?.emailNotifications ?? true;
-    _pushNotifications = user?.pushNotifications ?? true;
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _mobileController.dispose();
-    _avatarController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _isSaving = true;
-    });
-
-    final state = Provider.of<StateManager>(context, listen: false);
-    final result = await state.updateProfile(
-      name: _nameController.text.trim(),
-      email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,
-      mobileNumber: _mobileController.text.trim(),
-      avatarUrl: _avatarController.text.trim(),
-      preferredCurrency: _preferredCurrency,
-      language: _language,
-      emailNotifications: _emailNotifications,
-      pushNotifications: _pushNotifications,
-    );
-
-    if (mounted) {
-      setState(() {
-        _isSaving = false;
-      });
-
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile updated successfully!'),
-            backgroundColor: Color(0xFF0D9488),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Failed to update profile'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    }
-  }
+  String _appearance = 'Light';
 
   @override
   Widget build(BuildContext context) {
+    final state = Provider.of<StateManager>(context);
+    final user = state.currentUser;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: AppColors.bgSecondary,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Edit Profile', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: AppColors.bgSecondary,
         elevation: 0,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0D9488)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: [0.1, 0.7, 1.3],
-          ),
+        automaticallyImplyLeading: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          color: AppColors.textPrimary,
+          onPressed: () => Navigator.pop(context),
         ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Avatar Section
-                  Center(
-                    child: Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 54,
-                          backgroundColor: const Color(0xFF0D9488),
-                          backgroundImage: _avatarController.text.isNotEmpty
-                              ? NetworkImage(_avatarController.text)
-                              : null,
-                          child: _avatarController.text.isEmpty
-                              ? Text(
-                                  _nameController.text.isNotEmpty ? _nameController.text[0].toUpperCase() : '?',
-                                  style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white),
-                                )
-                              : null,
+      ),
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Title
+              Text(
+                'Profile',
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+              ),
+              const SizedBox(height: AppSpacing.xxl),
+
+              // User Profile Card
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment(0.0, -0.5),
+                    end: Alignment(0.0, 1.0),
+                    colors: [
+                      Color(0xFFFFE3EC),
+                      Color(0xFFFDF1F4),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(AppRadius.xxl),
+                ),
+                child: Row(
+                  children: [
+                    // Avatar
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppColors.primaryAccent.withValues(alpha: 0.2),
+                            AppColors.primaryAccent.withValues(alpha: 0.1),
+                          ],
                         ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: CircleAvatar(
-                            radius: 18,
-                            backgroundColor: Colors.white,
-                            child: IconButton(
-                              icon: const Icon(Icons.edit, size: 16, color: Color(0xFF0F172A)),
-                              onPressed: () {
-                                _showAvatarUrlDialog();
-                              },
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                      ),
+                      child: Center(
+                        child: Text(
+                          user.name.isNotEmpty
+                              ? user.name.split(' ').map((e) => e[0]).join().toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primaryAccent,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.lg),
+                    // User Info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.name,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Personal Info Card
-                  _buildSectionTitle('Personal Info'),
-                  _buildCard([
-                    // Full Name
-                    TextFormField(
-                      controller: _nameController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: _buildInputDecoration('Full Name', Icons.person),
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) return 'Please enter your name';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    // Email
-                    TextFormField(
-                      controller: _emailController,
-                      style: const TextStyle(color: Colors.white),
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: _buildInputDecoration('Email Address (Optional)', Icons.email),
-                      validator: (val) {
-                        if (val != null && val.isNotEmpty) {
-                          final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-                          if (!emailRegex.hasMatch(val.trim())) return 'Enter a valid email address';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    // Mobile Number
-                    TextFormField(
-                      controller: _mobileController,
-                      style: const TextStyle(color: Colors.white),
-                      keyboardType: TextInputType.phone,
-                      maxLength: 10,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: _buildInputDecoration('Mobile Number', Icons.phone).copyWith(counterText: ''),
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) return 'Please enter your mobile number';
-                        final reg = RegExp(r'^[6-9]\d{9}$');
-                        if (!reg.hasMatch(val.trim())) return 'Enter a valid 10-digit number starting with 6-9';
-                        return null;
-                      },
-                    ),
-                  ]),
-                  const SizedBox(height: 24),
-
-                  // Preferences Card
-                  _buildSectionTitle('Preferences'),
-                  _buildCard([
-                    // Preferred Currency
-                    DropdownButtonFormField<String>(
-                      value: _preferredCurrency,
-                      dropdownColor: const Color(0xFF1E293B),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: _buildInputDecoration('Preferred Currency', Icons.monetization_on),
-                      items: const [
-                        DropdownMenuItem(value: 'INR', child: Text('INR (₹)')),
-                        DropdownMenuItem(value: 'USD', child: Text('USD (\$)')),
-                        DropdownMenuItem(value: 'EUR', child: Text('EUR (€)')),
-                        DropdownMenuItem(value: 'GBP', child: Text('GBP (£)')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _preferredCurrency = val);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    // Preferred Language
-                    DropdownButtonFormField<String>(
-                      value: _language,
-                      dropdownColor: const Color(0xFF1E293B),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: _buildInputDecoration('Language', Icons.language),
-                      items: const [
-                        DropdownMenuItem(value: 'en', child: Text('English')),
-                        DropdownMenuItem(value: 'hi', child: Text('Hindi')),
-                        DropdownMenuItem(value: 'es', child: Text('Spanish')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _language = val);
-                      },
-                    ),
-                  ]),
-                  const SizedBox(height: 24),
-
-                  // Notifications Card
-                  _buildSectionTitle('Notifications'),
-                  _buildCard([
-                    SwitchListTile(
-                      title: const Text('Email Notifications', style: TextStyle(color: Colors.white)),
-                      value: _emailNotifications,
-                      activeColor: const Color(0xFF14B8A6),
-                      onChanged: (val) => setState(() => _emailNotifications = val),
-                    ),
-                    const Divider(color: Colors.white10),
-                    SwitchListTile(
-                      title: const Text('Push Notifications', style: TextStyle(color: Colors.white)),
-                      value: _pushNotifications,
-                      activeColor: const Color(0xFF14B8A6),
-                      onChanged: (val) => setState(() => _pushNotifications = val),
-                    ),
-                  ]),
-                  const SizedBox(height: 24),
-
-                  // Password Reset Info
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.info, color: Colors.blue, size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'To change your password, use the "Forgot Password" option on the login screen.',
-                            style: TextStyle(color: Colors.blue.shade300, fontSize: 13),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            user.email,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF96707E),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Save Profile Button
-                  if (_isSaving)
-                    const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)))
-                  else
-                    ElevatedButton(
-                      onPressed: _saveProfile,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D9488),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 4,
+                        ],
                       ),
-                      child: const Text('Save Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
-                  const SizedBox(height: 32),
-                ],
+                    // Edit Button
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                        vertical: AppSpacing.sm,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.textPrimary,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: const Text(
+                        'Edit',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(height: AppSpacing.xxl),
+
+              // Preferences Section
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: Text(
+                  'PREFERENCES',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                    letterSpacing: 0.05,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.xxl),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.border),
+                    color: AppColors.bgPrimary,
+                  ),
+                  child: Column(
+                    children: [
+                      // Currency
+                      _buildPreferenceRow(
+                        label: 'Currency',
+                        value: '₹ INR ▾',
+                        onTap: () {},
+                        showBorder: true,
+                      ),
+                      // Notifications
+                      _buildNotificationRow(),
+                      // Appearance
+                      _buildAppearanceRow(),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xxl),
+
+              // Account Section
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: Text(
+                  'ACCOUNT',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                    letterSpacing: 0.05,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.xxl),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.border),
+                    color: AppColors.bgPrimary,
+                  ),
+                  child: Column(
+                    children: [
+                      // Your Groups
+                      _buildAccountRow(
+                        label: 'Your groups',
+                        value: '${state.groups.length} ›',
+                        onTap: () {},
+                        showBorder: true,
+                      ),
+                      // Help & Support
+                      _buildAccountRow(
+                        label: 'Help & support',
+                        value: '›',
+                        onTap: () {},
+                        showBorder: true,
+                      ),
+                      // Log Out
+                      _buildLogoutRow(state),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, bottom: 8.0),
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF14B8A6), letterSpacing: 0.5),
-      ),
-    );
-  }
-
-  Widget _buildCard(List<Widget> children) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Column(children: children),
-    );
-  }
-
-  InputDecoration _buildInputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-      prefixIcon: Icon(icon, color: const Color(0xFF0D9488), size: 20),
-      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.2))),
-      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0D9488))),
-    );
-  }
-
-  void _showAvatarUrlDialog() {
-    final controller = TextEditingController(text: _avatarController.text);
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
-          title: const Text('Change Avatar URL', style: TextStyle(color: Colors.white)),
-          content: TextFormField(
-            controller: controller,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              labelText: 'Avatar Image URL',
-              labelStyle: TextStyle(color: Color(0xFF94A3B8)),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0D9488))),
+  Widget _buildPreferenceRow({
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+    required bool showBorder,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.lg,
+        ),
+        decoration: BoxDecoration(
+          border: showBorder
+              ? Border(
+                  bottom: BorderSide(color: AppColors.bgLight),
+                )
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Color(0xFF94A3B8))),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _avatarController.text = controller.text.trim();
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('Apply', style: TextStyle(color: Color(0xFF0D9488))),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.muted,
+              ),
             ),
           ],
-        );
-      },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationRow() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.lg,
+      ),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.bgLight),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'Notifications',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(
+            width: 46,
+            height: 28,
+            child: Switch(
+              value: true,
+              onChanged: (value) {},
+              activeThumbColor: AppColors.primaryAccent,
+              activeTrackColor: AppColors.inputBg,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppearanceRow() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Appearance',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.inputBg,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              border: Border.all(color: AppColors.border),
+            ),
+            padding: const EdgeInsets.all(6),
+            child: Row(
+              children: ['Light', 'Dark', 'System'].map((option) {
+                final isSelected = _appearance == option;
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _appearance = option),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color:
+                            isSelected ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: Text(
+                        option,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: isSelected
+                              ? AppColors.textPrimary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountRow({
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+    required bool showBorder,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.lg,
+        ),
+        decoration: BoxDecoration(
+          border: showBorder
+              ? Border(
+                  bottom: BorderSide(color: AppColors.bgLight),
+                )
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutRow(StateManager state) {
+    return GestureDetector(
+      onTap: () => _showLogoutDialog(state),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.lg,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Log out',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFD92553),
+              ),
+            ),
+            const Text(
+              '›',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFE8A2B6),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLogoutDialog(StateManager state) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        title: const Text('Log out?'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              state.logout();
+              Navigator.pop(context);
+            },
+            child: const Text(
+              'Log out',
+              style: TextStyle(color: Color(0xFFD92553)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

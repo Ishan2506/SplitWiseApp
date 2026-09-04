@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/state_manager.dart';
+import '../theme/app_theme.dart';
 import 'authentication/login_screen.dart';
 import 'Dashboard/dashboard_screen.dart';
 
@@ -11,22 +12,44 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
   @override
   void initState() {
     super.initState();
+    _setupAnimations();
     _navigateAfterSplash();
   }
 
+  void _setupAnimations() {
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+
+    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+        .animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+        );
+
+    _animationController.forward();
+  }
+
   Future<void> _navigateAfterSplash() async {
-    // Always show splash screen for 3 seconds for a professional look
     await Future.delayed(const Duration(seconds: 3));
 
     if (!mounted) return;
 
     final state = Provider.of<StateManager>(context, listen: false);
 
-    // Navigate based on login status
     if (state.isLoggedIn) {
       Navigator.pushReplacementNamed(context, '/dashboard');
     } else {
@@ -35,98 +58,144 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0D9488)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: [0.1, 0.6, 1.2],
+            begin: Alignment(0.0, -0.5),
+            end: Alignment(0.0, 1.0),
+            colors: [
+              Color(0xFFFFE3EC), // Soft pink
+              Color(0xFFFDF1F4), // Light pink
+              Color(0xFFFFFFFF), // White
+            ],
+            stops: [0.0, 0.42, 1.0],
           ),
         ),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0D9488),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF0D9488).withOpacity(0.4),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.account_balance_wallet,
-                  size: 48,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 24),
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Logo Icon
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFF1A1512), // Your brand: #1A1512
+                              AppColors.primaryAccent, // Your brand: #EE2B6C
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryAccent.withValues(alpha: 0.3),
+                              blurRadius: 24,
+                              offset: const Offset(0, 12),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.currency_rupee,
+                          size: 40,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
 
-              // App Title
-              const Text(
-                'SplitWise Premium',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 8),
+                      // App Name
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: const TextSpan(
+                          style: TextStyle(
+                            fontSize: 42,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.02,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: 'Paisa',
+                              style: TextStyle(color: Color(0xFF1A1512)), // Your brand: #1A1512
+                            ),
+                            TextSpan(
+                              text: 'Split',
+                              style:
+                                  TextStyle(color: AppColors.primaryAccent), // Your brand: #EE2B6C
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
 
-              // Subtitle
-              const Text(
-                'Split bills, share experiences, 100% ad-free.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF94A3B8),
-                ),
-              ),
-              const SizedBox(height: 40),
+                      // Tagline
+                      const Text(
+                        'Share the bill,\nnot the stress',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1A1512), // Your brand: #1A1512
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
 
-              // Loading indicator with animation
-              const SizedBox(
-                width: 50,
-                height: 50,
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0D9488)),
-                  strokeWidth: 4,
-                ),
-              ),
-              const SizedBox(height: 20),
+                      // Subtitle
+                      const Text(
+                        'Add an expense in seconds. PaisaSplit keeps track of who paid, who owes, and how to square up.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Color(0xFF6B5F56), // Your brand: #6B5F56
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 48),
 
-              // Status text
-              const Text(
-                'Welcome Back',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 8),
+                      // Loading indicator
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: CircularProgressIndicator(
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            AppColors.primaryAccent,
+                          ),
+                          strokeWidth: 3,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
 
-              const Text(
-                'Setting up your session...',
-                style: TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontSize: 12,
+                      // Loading text
+                      const Text(
+                        'Setting up your session...',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF6B5F56), // Your brand: #6B5F56
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

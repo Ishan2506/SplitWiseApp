@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/state_manager.dart';
-import 'add_expense_screen.dart';
-import 'settle_up_dialog.dart';
+import '../theme/app_theme.dart';
+import '../utils/app_constants.dart';
 
 class DashboardTab extends StatelessWidget {
   const DashboardTab({Key? key}) : super(key: key);
@@ -11,401 +11,302 @@ class DashboardTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = Provider.of<StateManager>(context);
     final currentUserId = state.currentUserId;
-    final totalBalance = state.getUserTotalBalance(currentUserId);
     final totalOwed = state.getUserTotalOwed(currentUserId);
     final totalOwe = state.getUserTotalOwe(currentUserId);
-    final simplifiedDebts = state.getSimplifiedDebts();
-
-    // Combined activities (Expenses + Payments) sorted by date
-    final activities = [
-      ...state.expenses.map((e) => {'type': 'expense', 'data': e, 'date': e.date}),
-      ...state.payments.map((p) => {'type': 'payment', 'data': p, 'date': p.date}),
-    ];
-    activities.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Net Balance Card
-            Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF1E293B),
-                    Color(0xFF0F172A),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  )
-                ],
-              ),
-              padding: const EdgeInsets.all(20),
+            // Greeting Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'YOUR NET BALANCE',
-                    style: TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                   Text(
-                    '₹${totalBalance.toStringAsFixed(2)}',
+                    'Hi ${state.currentUser.name.split(' ').first}',
                     style: TextStyle(
-                      color: totalBalance >= 0 ? const Color(0xFF10B981) : const Color(0xFFF43F5E),
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 0.05,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Divider(color: Color(0xFF334155)),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'you owe',
-                              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '₹${totalOwe.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: Color(0xFFF43F5E),
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                  const SizedBox(height: 4),
+                  Text(
+                    'Your groups',
+                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                          color: AppColors.textPrimary,
                         ),
-                      ),
-                      Container(
-                        height: 40,
-                        width: 1,
-                        color: const Color(0xFF334155),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Padding(
-                              padding: EdgeInsets.only(left: 16.0),
-                              child: Text(
-                                'you are owed',
-                                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 16.0),
-                              child: Text(
-                                '₹${totalOwed.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  color: Color(0xFF10B981),
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xxl),
 
-            // Quick Actions
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const AddExpenseScreen()),
-                      );
-                    },
-                    icon: const Icon(Icons.add, color: Colors.white),
-                    label: const Text('Add Expense', style: TextStyle(fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D9488),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => const SettleUpDialog(),
-                      );
-                    },
-                    icon: const Icon(Icons.payment, color: Color(0xFF0D9488)),
-                    label: const Text('Settle Up', style: TextStyle(fontWeight: FontWeight.bold)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF0D9488),
-                      side: const BorderSide(color: Color(0xFF0D9488), width: 1.5),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 28),
-
-            // Simplified Debts Section
-            const Text(
-              'Suggested Settlements',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFFF8FAFC),
+            // Summary Status Card - Dark background like HTML design
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0E0E10),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
               ),
-            ),
-            const SizedBox(height: 12),
-            if (simplifiedDebts.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: Text(
-                    'No suggested settlements. Everyone is settled up!',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                  ),
-                ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: simplifiedDebts.length,
-                itemBuilder: (context, index) {
-                  final debt = simplifiedDebts[index];
-                  final fromUser = debt['from'];
-                  final toUser = debt['to'];
-                  final amount = debt['amount'];
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          backgroundColor: const Color(0xFF334155),
-                          child: Text(
-                            fromUser.initials,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        Text(
+                          'Across all groups',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white.withValues(alpha: 0.6),
+                            letterSpacing: 0.04,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: RichText(
-                            text: TextSpan(
-                              style: const TextStyle(color: Colors.white, fontSize: 14),
-                              children: [
-                                TextSpan(
-                                  text: fromUser.name == 'You' ? 'You' : fromUser.name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                const TextSpan(text: ' owe '),
-                                TextSpan(
-                                  text: toUser.name == 'You' ? 'You' : toUser.name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ],
+                        const SizedBox(height: AppSpacing.md),
+                        // You Owe
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'You owe',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
                             ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '₹${totalOwe.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.02,
+                                color: Color(0xFFEE2B6C),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.lg),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 30),
+                        // You're Owed
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "You're owed",
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '₹${totalOwed.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.02,
+                                color: Color(0xFF1D7A4C),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xxl),
+
+            // Groups List
+            if (state.groups.isNotEmpty)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'My groups',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.01,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                         Text(
-                          '₹${amount.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            color: Color(0xFFF43F5E),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                          '+New group',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primaryAccent,
                           ),
                         ),
                       ],
                     ),
-                  );
-                },
-              ),
-            const SizedBox(height: 28),
-
-            // Recent Activity Section
-            const Text(
-              'Recent Activity',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFFF8FAFC),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (activities.isEmpty)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Text(
-                    'No activities logged yet.',
-                    style: TextStyle(color: Color(0xFF94A3B8)),
                   ),
-                ),
+                  const SizedBox(height: AppSpacing.lg),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: state.groups.length,
+                    itemBuilder: (context, index) {
+                      final group = state.groups[index];
+                      final categoryLabel = group.category.isNotEmpty
+                          ? group.category.substring(0, 3).toUpperCase()
+                          : 'GRP';
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+                        decoration: BoxDecoration(
+                          color: AppColors.bgPrimary,
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        padding: const EdgeInsets.all(AppSpacing.lg),
+                        child: Row(
+                          children: [
+                            // Category Label
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    AppColors.primaryAccent.withValues(alpha: 0.2),
+                                    AppColors.primaryAccent.withValues(alpha: 0.1),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(AppRadius.md),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  categoryLabel,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primaryAccent,
+                                    letterSpacing: 0.05,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.lg),
+                            // Group Info
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    group.name,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${group.memberIds.length} members · ${state.expenses.where((e) => e.groupId == group.id).length} expenses',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Balance Info
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'YOU OWE',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textSecondary,
+                                    letterSpacing: 0.04,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '₹0',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.02,
+                                    color: Color(0xFFD92553),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
               )
             else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: activities.length > 5 ? 5 : activities.length,
-                itemBuilder: (context, index) {
-                  final act = activities[index];
-                  final isExpense = act['type'] == 'expense';
-
-                  if (isExpense) {
-                    final exp = act['data'] as dynamic;
-                    final payer = state.members.firstWhere((m) => m.id == exp.paidById);
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(12),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  color: AppColors.bgLight,
+                ),
+                padding: const EdgeInsets.all(AppSpacing.xxl),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.group_outlined,
+                      size: 48,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      'No groups yet',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        // Create group action
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Create your first group'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryAccent,
+                        foregroundColor: Colors.white,
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0D9488).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(Icons.receipt_long, color: Color(0xFF14B8A6)),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  exp.description,
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Paid by ${payer.name == 'You' ? 'you' : payer.name}',
-                                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '₹${exp.amount.toStringAsFixed(2)}',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${exp.date.day}/${exp.date.month}',
-                                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  } else {
-                    final pay = act['data'] as dynamic;
-                    final fromM = state.members.firstWhere((m) => m.id == pay.fromMemberId);
-                    final toM = state.members.firstWhere((m) => m.id == pay.toMemberId);
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(Icons.check_circle_outline, color: Color(0xFF10B981)),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${fromM.name == 'You' ? 'You' : fromM.name} paid ${toM.name == 'You' ? 'you' : toM.name}',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'Payment Record',
-                                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '₹${pay.amount.toStringAsFixed(2)}',
-                                style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${pay.date.day}/${pay.date.month}',
-                                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                },
+                    ),
+                  ],
+                ),
               ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
