@@ -6,13 +6,15 @@ import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
+import '../../widgets/common_widgets.dart';
+import '../add_expense_screen.dart';
+import '../settle_up_dialog.dart';
 import 'create_group_screen.dart';
 import 'group_members_screen.dart';
 import 'group_widgets.dart';
 import 'invite_screen.dart';
 
-/// One group: its photo and description, who is in it, where everyone stands,
-/// and how much of the balance limit is left.
+/// One group: what it is, where everyone stands, and who should pay whom.
 class GroupDetailScreen extends StatefulWidget {
   final String groupId;
 
@@ -36,25 +38,26 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
-        title: Text('Delete this group?',
-            style: Theme.of(context).textTheme.titleLarge),
+        title: const Text('Delete this group?'),
         content: Text(
-          'Every expense and settlement in "${group.name}" will be deleted too. '
-          'This cannot be undone.',
-          style: TextStyle(color: AppColors.textSecondary),
+          'Every expense and settlement in "${group.name}" will be deleted '
+          'too. This cannot be undone.',
         ),
+        actionsPadding: const EdgeInsets.fromLTRB(
+            AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
+            style:
+                TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
+          PSButton(
+            label: 'Delete',
+            variant: PSButtonVariant.danger,
+            size: PSButtonSize.small,
+            expand: false,
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error),
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -62,8 +65,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    final result =
-        await context.read<GroupProvider>().deleteGroup(group.id);
+    final result = await context.read<GroupProvider>().deleteGroup(group.id);
     if (!mounted) return;
 
     if (result['success'] == true) {
@@ -82,20 +84,11 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
     if (group == null) {
       return Scaffold(
-        backgroundColor: AppColors.bgSecondary,
-        appBar: AppBar(
-          backgroundColor: AppColors.bgSecondary,
-          elevation: 0,
-          iconTheme: const IconThemeData(color: AppColors.textPrimary),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            color: AppColors.textPrimary,
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        body: Center(
-          child: Text('This group is no longer available',
-              style: TextStyle(color: AppColors.textSecondary)),
+        appBar: AppBar(),
+        body: const EmptyStateWidget(
+          iconData: Icons.link_off_rounded,
+          title: 'Group unavailable',
+          subtitle: 'This group may have been deleted or you were removed.',
         ),
       );
     }
@@ -104,42 +97,29 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final isCreator = group.isCreatedBy(currentUserId);
     final balances = provider.balancesFor(group.id);
     final userBalance = balances.balanceFor(currentUserId);
-    final symbol = group.currencySymbol;
 
     return Scaffold(
-      backgroundColor: AppColors.bgSecondary,
       appBar: AppBar(
-        backgroundColor: AppColors.bgSecondary,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.textPrimary),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          color: AppColors.textPrimary,
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(group.name,
-            style: const TextStyle(
-                color: AppColors.textPrimary, fontWeight: FontWeight.w800)),
+        title: Text(group.name, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
             tooltip: 'Invite people',
-            icon: const Icon(Icons.person_add_alt_1, color: AppColors.primaryAccent),
+            icon: const Icon(Icons.person_add_alt_1_rounded),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                  builder: (_) => InviteScreen(groupId: group.id)),
+              MaterialPageRoute(builder: (_) => InviteScreen(groupId: group.id)),
             ),
           ),
           if (isCreator)
             PopupMenuButton<String>(
-              color: const Color(0xFF1A1A1E),
-              icon: const Icon(Icons.more_vert, color: Colors.white),
+              icon: const Icon(Icons.more_vert_rounded),
               onSelected: (value) {
                 if (value == 'edit') {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => CreateGroupScreen(existingGroupId: group.id),
+                      builder: (_) =>
+                          CreateGroupScreen(existingGroupId: group.id),
                     ),
                   );
                 } else if (value == 'delete') {
@@ -151,10 +131,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   value: 'edit',
                   child: Row(
                     children: [
-                      Icon(Icons.edit, size: 18, color: Color(0xFFEE2B6C)),
+                      Icon(Icons.edit_outlined, size: 18),
                       SizedBox(width: 10),
-                      Text('Edit group',
-                          style: TextStyle(color: Colors.white)),
+                      Text('Edit group'),
                     ],
                   ),
                 ),
@@ -162,105 +141,131 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   value: 'delete',
                   child: Row(
                     children: [
-                      Icon(Icons.delete_outline,
-                          size: 18, color: const Color(0xFFD92553)),
+                      Icon(Icons.delete_outline_rounded,
+                          size: 18, color: AppColors.error),
                       SizedBox(width: 10),
                       Text('Delete group',
-                          style: TextStyle(color: const Color(0xFFD92553))),
+                          style: TextStyle(color: AppColors.error)),
                     ],
                   ),
                 ),
               ],
             ),
+          const SizedBox(width: AppSpacing.xxs),
         ],
       ),
       body: RefreshIndicator(
         color: AppColors.primaryAccent,
-        backgroundColor: AppColors.bgPrimary,
         onRefresh: () => provider.refreshGroup(group.id),
         child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics()),
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
           children: [
-            _buildHeader(group),
-            const SizedBox(height: 20),
-            _buildBalanceCard(group, userBalance, symbol),
-            if (group.hasBalanceLimit) ...[
-              const SizedBox(height: 14),
-              _buildLimitCard(group, balances, currentUserId, symbol),
-            ],
-            const SizedBox(height: 20),
-            _buildMembersStrip(group, balances, currentUserId, symbol),
-            const SizedBox(height: 20),
-            _buildSettlements(group, balances, currentUserId, symbol),
+            PageContainer(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: AppSpacing.xs),
+                  _GroupHeader(group: group),
+                  const SizedBox(height: AppSpacing.md),
+                  _YourPosition(
+                    balance: userBalance,
+                    onSettle: () async {
+                      final recorded = await SettleUpDialog.show(context,
+                          groupId: group.id);
+                      if (recorded == true && context.mounted) {
+                        provider.refreshGroup(group.id);
+                      }
+                    },
+                    onAddExpense: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AddExpenseScreen(preselectedGroupId: group.id),
+                      ),
+                    ),
+                  ),
+                  if (group.hasBalanceLimit) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    _LimitCard(
+                      group: group,
+                      balances: balances,
+                      currentUserId: currentUserId,
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.xl),
+
+                  SectionHeader(
+                    title: 'Member balances',
+                    actionLabel: 'Manage',
+                    onAction: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => GroupMembersScreen(groupId: group.id),
+                      ),
+                    ),
+                  ),
+                  _MemberBalanceList(
+                    group: group,
+                    balances: balances,
+                    currentUserId: currentUserId,
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+
+                  const SectionHeader(title: 'Who pays whom'),
+                  _SettlementList(
+                    balances: balances,
+                    currentUserId: currentUserId,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildHeader(GroupModel group) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1E),
-        borderRadius: BorderRadius.circular(18),
-      ),
+/// Group identity: avatar, type and member count.
+class _GroupHeader extends StatelessWidget {
+  final GroupModel group;
+
+  const _GroupHeader({required this.group});
+
+  @override
+  Widget build(BuildContext context) {
+    return PSCard(
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GroupAvatar(group: group, size: 64, radius: 18),
-          const SizedBox(width: 16),
+          GroupAvatar(group: group, size: 50),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   group.name,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.headlineSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 6),
-                GroupTypeChip(type: group.type),
-                if (group.description.isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                const SizedBox(height: 3),
+                Text(
+                  '${group.type.label} · ${group.members.length} member'
+                  '${group.members.length == 1 ? '' : 's'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (group.description.isNotEmpty &&
+                    group.description != group.type.label) ...[
+                  const SizedBox(height: 3),
                   Text(
                     group.description,
-                    style: const TextStyle(
-                        color: Color(0xFFCCBBA8), fontSize: 13, height: 1.4),
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Icon(Icons.people_outline,
-                        size: 14, color: Color(0xFFCCBBA8)),
-                    const SizedBox(width: 5),
-                    Text(
-                      '${group.members.length} '
-                      '${group.members.length == 1 ? 'member' : 'members'}',
-                      style: const TextStyle(
-                          color: Color(0xFFCCBBA8), fontSize: 12),
-                    ),
-                    if (group.createdByName.isNotEmpty) ...[
-                      const SizedBox(width: 12),
-                      const Text('•',
-                          style: TextStyle(color: Color(0xFFCCBBA8))),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Text(
-                          'by ${group.createdByName}',
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Color(0xFFCCBBA8), fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
               ],
             ),
           ),
@@ -268,134 +273,188 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       ),
     );
   }
+}
 
-  Widget _buildBalanceCard(
-      GroupModel group, double userBalance, String symbol) {
-    final settled = userBalance.abs() < 0.01;
-    final color = settled
-        ? AppColors.textSecondary
-        : userBalance > 0
-            ? const Color(0xFF1D7A4C)
-            : const Color(0xFFD92553);
+/// Where the signed-in user stands in this group, plus the two main actions.
+class _YourPosition extends StatelessWidget {
+  final double balance;
+  final VoidCallback onSettle;
+  final VoidCallback onAddExpense;
+
+  const _YourPosition({
+    required this.balance,
+    required this.onSettle,
+    required this.onAddExpense,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final settled = balance.abs() < 0.01;
+    final owed = balance > 0;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1E),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        color: settled
+            ? AppColors.bgPrimary
+            : owed
+                ? AppColors.successLight
+                : AppColors.primarySurface,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(
+          color: settled
+              ? AppColors.border
+              : owed
+                  ? AppColors.successBorder
+                  : AppColors.primaryBorder,
+        ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
+          OverlineLabel(
             settled
-                ? Icons.check_circle_outline
-                : userBalance > 0
-                    ? Icons.trending_up
-                    : Icons.trending_down,
-            color: color,
-            size: 30,
+                ? 'Your balance'
+                : owed
+                    ? "You're owed"
+                    : 'You owe',
+            color: settled
+                ? AppColors.muted
+                : owed
+                    ? const Color(0xFF4F8A68)
+                    : const Color(0xFFC2607C),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Your balance in this group',
-                    style:
-                        TextStyle(color: Color(0xFFCCBBA8), fontSize: 12)),
-                const SizedBox(height: 4),
-                Text(
-                  settled
-                      ? 'All settled up'
-                      : userBalance > 0
-                          ? 'You are owed $symbol${userBalance.toStringAsFixed(2)}'
-                          : 'You owe $symbol${userBalance.abs().toStringAsFixed(2)}',
-                  style: TextStyle(
-                      color: color,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold),
-                ),
-              ],
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              formatMoney(balance.abs()),
+              style: TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -1.3,
+                height: 1.05,
+                color: settled
+                    ? AppColors.textPrimary
+                    : owed
+                        ? AppColors.success
+                        : AppColors.negative,
+              ),
             ),
+          ),
+          if (settled) ...[
+            const SizedBox(height: 4),
+            Text('You are all square in this group',
+                style: Theme.of(context).textTheme.bodySmall),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: PSButton(
+                  label: 'Add expense',
+                  size: PSButtonSize.medium,
+                  onPressed: onAddExpense,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: PSButton(
+                  label: 'Settle up',
+                  variant: PSButtonVariant.secondary,
+                  size: PSButtonSize.medium,
+                  onPressed: onSettle,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildLimitCard(GroupModel group, GroupBalances balances,
-      String currentUserId, String symbol) {
+/// The per-member spending guard, when the group has one.
+class _LimitCard extends StatelessWidget {
+  final GroupModel group;
+  final GroupBalances balances;
+  final String currentUserId;
+
+  const _LimitCard({
+    required this.group,
+    required this.balances,
+    required this.currentUserId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     MemberBalance? mine;
     for (final b in balances.balances) {
       if (b.userId == currentUserId) mine = b;
     }
+    final overLimit = balances.balances.where((b) => b.limitExceeded).toList();
 
-    final overLimit =
-        balances.balances.where((b) => b.limitExceeded).toList();
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1E),
-        borderRadius: BorderRadius.circular(16),
-      ),
+    return PSCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.speed, size: 18, color: AppColors.primaryAccent),
-              const SizedBox(width: 8),
-              const Text(
-                'Group balance limit',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold),
+              const Icon(Icons.speed_rounded,
+                  size: 17, color: AppColors.primaryAccent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text('Balance limit',
+                    style: Theme.of(context).textTheme.titleMedium),
               ),
-              const Spacer(),
               Text(
-                '$symbol${group.balanceLimit.toStringAsFixed(0)} per member',
+                '${formatMoney(group.balanceLimit)} per member',
                 style: const TextStyle(
-                    color: AppColors.primaryAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryAccent,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          const Text(
+          const SizedBox(height: 4),
+          Text(
             'New expenses are blocked once a member would owe more than this.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpacing.sm),
           BalanceLimitBar(
             used: mine?.limitUsed ?? 0,
             limit: group.balanceLimit,
-            currencySymbol: symbol,
+            currencySymbol: group.currencySymbol,
             label: 'Your share of the limit',
           ),
           if (overLimit.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.xs),
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.xs, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFFD92553).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
+                color: AppColors.primarySurface,
+                borderRadius: BorderRadius.circular(AppRadius.xs),
+                border: Border.all(color: AppColors.primaryBorder),
               ),
               child: Row(
                 children: [
                   const Icon(Icons.warning_amber_rounded,
-                      size: 18, color: const Color(0xFFD92553)),
-                  const SizedBox(width: 8),
+                      size: 16, color: AppColors.negative),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       overLimit.length == 1
                           ? '${overLimit.first.name} is over the limit'
                           : '${overLimit.length} members are over the limit',
                       style: const TextStyle(
-                          color: const Color(0xFFD92553), fontSize: 12),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primaryDark,
+                      ),
                     ),
                   ),
                 ],
@@ -406,198 +465,187 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       ),
     );
   }
+}
 
-  Widget _buildMembersStrip(GroupModel group, GroupBalances balances,
-      String currentUserId, String symbol) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Members',
-                style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => GroupMembersScreen(groupId: group.id),
-                  ),
-                ),
-                child: Text('Manage',
-                    style: TextStyle(
-                        color: AppColors.primaryAccent,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-          child: Row(
-            children: List.generate(group.members.length, (index) {
-              final member = group.members[index];
+/// Every member and where they stand.
+class _MemberBalanceList extends StatelessWidget {
+  final GroupModel group;
+  final GroupBalances balances;
+  final String currentUserId;
+
+  const _MemberBalanceList({
+    required this.group,
+    required this.balances,
+    required this.currentUserId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bgPrimary,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+        boxShadow: AppShadow.card,
+      ),
+      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
+      child: Column(
+        children: [
+          for (var i = 0; i < group.members.length; i++) ...[
+            Builder(builder: (context) {
+              final member = group.members[i];
               final balance = balances.balanceFor(member.id);
-              final isSelf = member.id == currentUserId;
               final settled = balance.abs() < 0.01;
+              final isSelf = member.id == currentUserId;
 
-              return Container(
-                width: 85,
-                margin: const EdgeInsets.only(right: AppSpacing.md),
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: AppColors.bgPrimary,
-                  border: Border.all(color: AppColors.border),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    MemberAvatar(member: member, radius: 16),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      isSelf ? 'You' : member.name.split(' ').first,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      settled
-                          ? 'settled'
-                          : balance > 0
-                              ? '+${balance.abs().toStringAsFixed(0)}'
-                              : '-${balance.abs().toStringAsFixed(0)}',
-                      style: TextStyle(
-                        color: settled
-                            ? AppColors.muted
-                            : balance > 0
-                                ? const Color(0xFF1D7A4C)
-                                : const Color(0xFFD92553),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
+              return BalanceRow(
+                name: isSelf ? '${member.name} (you)' : member.name,
+                label: settled
+                    ? 'settled'
+                    : balance > 0
+                        ? 'gets back'
+                        : 'owes',
+                amount: settled ? '—' : formatMoney(balance.abs()),
+                amountColor: settled
+                    ? AppColors.muted
+                    : balance > 0
+                        ? AppColors.success
+                        : AppColors.negative,
               );
             }),
-          ),
+            if (i != group.members.length - 1)
+              const Padding(
+                padding: EdgeInsets.only(left: 54, right: AppSpacing.xs),
+                child: Divider(height: 1),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The simplified set of payments that would clear the group.
+class _SettlementList extends StatelessWidget {
+  final GroupBalances balances;
+  final String currentUserId;
+
+  const _SettlementList({
+    required this.balances,
+    required this.currentUserId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final suggestions = balances.suggestions;
+
+    if (suggestions.isEmpty) {
+      return PSCard(
+        color: AppColors.successLight,
+        borderColor: AppColors.successBorder,
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                size: 19, color: AppColors.success),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Text(
+                'Everyone is settled up in this group.',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.success,
+                ),
+              ),
+            ),
+          ],
         ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (final s in suggestions) ...[
+          _SettlementRow(suggestion: s, currentUserId: currentUserId),
+          const SizedBox(height: AppSpacing.xs),
+        ],
       ],
     );
   }
+}
 
-  Widget _buildSettlements(GroupModel group, GroupBalances balances,
-      String currentUserId, String symbol) {
-    final suggestions = balances.suggestions;
+class _SettlementRow extends StatelessWidget {
+  final SettlementSuggestion suggestion;
+  final String currentUserId;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Who pays whom',
-          style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 10),
-        if (suggestions.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1E),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.check_circle_outline,
-                    color: const Color(0xFF1D7A4C), size: 20),
-                SizedBox(width: 12),
-                Text('Everyone is settled up in this group.',
-                    style: TextStyle(
-                        color: AppColors.textSecondary, fontSize: 13)),
-              ],
-            ),
-          )
-        else
-          ...suggestions.map((s) {
-            final involvesMe =
-                s.fromId == currentUserId || s.toId == currentUserId;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1E),
-                borderRadius: BorderRadius.circular(12),
-                border: involvesMe
-                    ? Border.all(
-                        color: AppColors.primaryAccent.withValues(alpha: 0.5))
-                    : null,
-              ),
-              child: Row(
+  const _SettlementRow({
+    required this.suggestion,
+    required this.currentUserId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final iPay = suggestion.fromId == currentUserId;
+    final iReceive = suggestion.toId == currentUserId;
+    final involvesMe = iPay || iReceive;
+
+    return PSCard(
+      color: involvesMe ? AppColors.primarySurface : AppColors.bgPrimary,
+      borderColor: involvesMe ? AppColors.primaryBorder : AppColors.border,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
+      child: Row(
+        children: [
+          AvatarWidget.forName(suggestion.fromName, size: 32),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Icon(Icons.arrow_forward_rounded,
+                size: 15,
+                color: involvesMe ? AppColors.primaryAccent : AppColors.muted),
+          ),
+          AvatarWidget.forName(suggestion.toName, size: 32),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
                 children: [
-                  Expanded(
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: s.fromId == currentUserId
-                                ? 'You'
-                                : s.fromName,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold),
-                          ),
-                          const TextSpan(
-                            text: '  →  ',
-                            style: TextStyle(color: AppColors.textSecondary),
-                          ),
-                          TextSpan(
-                            text:
-                                s.toId == currentUserId ? 'You' : s.toName,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ),
-                  Text(
-                    '$symbol${s.amount.toStringAsFixed(2)}',
+                  TextSpan(text: iPay ? 'You' : suggestion.fromName),
+                  const TextSpan(
+                    text: ' pay ',
                     style: TextStyle(
-                      color: s.toId == currentUserId
-                          ? const Color(0xFF1D7A4C)
-                          : const Color(0xFFD92553),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
                     ),
                   ),
+                  TextSpan(text: iReceive ? 'you' : suggestion.toName),
                 ],
               ),
-            );
-          }),
-      ],
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xxs),
+          Text(
+            formatMoney(suggestion.amount, decimals: true),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+              color: iReceive
+                  ? AppColors.success
+                  : iPay
+                      ? AppColors.negative
+                      : AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

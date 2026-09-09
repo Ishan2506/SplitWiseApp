@@ -5,6 +5,7 @@ import '../../model/group_model.dart';
 import '../../network/api_service.dart';
 import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
+import '../../theme/app_theme.dart';
 import 'group_widgets.dart';
 import 'invite_screen.dart';
 
@@ -63,7 +64,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
               child: Text(
                 'Add a member',
                 style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.bold),
               ),
@@ -115,7 +116,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
                           leading: MemberAvatar(member: person),
                           title: Text(person.name,
                               style: const TextStyle(
-                                  color: Colors.white, fontSize: 14)),
+                                  color: AppColors.textPrimary, fontSize: 14)),
                           subtitle: person.email != null
                               ? Text(person.email!,
                                   style: const TextStyle(
@@ -165,7 +166,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           leaving ? 'Leave this group?' : 'Remove ${member.name}?',
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: AppColors.textPrimary),
         ),
         content: Text(
           leaving
@@ -241,11 +242,11 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
       backgroundColor: GroupColors.background,
       appBar: AppBar(
         backgroundColor: GroupColors.surface,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
         title: Text(
           'Members (${group.members.length})',
           style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold),
+              color: AppColors.textPrimary, fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
@@ -279,7 +280,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
                 Text(
                   'Pending invites (${group.pendingInvites.length})',
                   style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                       fontSize: 14,
                       fontWeight: FontWeight.bold),
                 ),
@@ -307,7 +308,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
                             children: [
                               Text(invite.contact,
                                   style: const TextStyle(
-                                      color: Colors.white, fontSize: 13)),
+                                      color: AppColors.textPrimary, fontSize: 13)),
                               const Text('Invited — not joined yet',
                                   style: TextStyle(
                                       color: GroupColors.muted, fontSize: 11)),
@@ -393,7 +394,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
                             isSelf ? 'You' : member.name,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: AppColors.textPrimary,
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
                             ),

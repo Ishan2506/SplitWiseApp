@@ -5,7 +5,6 @@ import 'state/group_provider.dart';
 import 'screen/splash_screen.dart';
 import 'screen/Dashboard/dashboard_screen.dart';
 import 'screen/authentication/login_screen.dart';
-import 'screen/groups/invite_link_handler.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -40,9 +39,9 @@ class SplitWiseApp extends StatelessWidget {
       navigatorKey: appNavigatorKey,
       title: 'PaisaSplit',
       debugShowCheckedModeBanner: false,
+      // Light theme only — the app has no dark mode.
       theme: AppTheme.lightTheme(),
-      darkTheme: AppTheme.darkTheme(),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       // Show splash screen first while initializing session
       home: const SplashScreen(),
       routes: {

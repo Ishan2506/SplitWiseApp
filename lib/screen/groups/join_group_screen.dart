@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../model/group_model.dart';
 import '../../state/group_provider.dart';
 import 'group_detail_screen.dart';
+import '../../theme/app_theme.dart';
 import 'group_widgets.dart';
 import 'scan_qr_screen.dart';
 
@@ -115,10 +116,10 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
       backgroundColor: GroupColors.background,
       appBar: AppBar(
         backgroundColor: GroupColors.surface,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
         title: const Text('Join a group',
             style:
-                TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
       ),
       body: ListView(
         physics: const BouncingScrollPhysics(),
@@ -179,7 +180,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
             const Text(
               'Scan a QR code',
               style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.bold),
             ),
@@ -201,7 +202,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
           child: TextField(
             controller: _codeController,
             style: const TextStyle(
-              color: Colors.white,
+              color: AppColors.textPrimary,
               fontSize: 18,
               letterSpacing: 3,
               fontWeight: FontWeight.bold,
@@ -301,7 +302,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
             preview.name,
             textAlign: TextAlign.center,
             style: const TextStyle(
-                color: Colors.white,
+                color: AppColors.textPrimary,
                 fontSize: 19,
                 fontWeight: FontWeight.bold),
           ),

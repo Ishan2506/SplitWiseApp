@@ -4,18 +4,24 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../model/group_model.dart';
+import '../../theme/app_theme.dart';
+import '../../utils/app_constants.dart';
+import '../../widgets/common_widgets.dart';
 
 /// The palette the group screens share with the rest of the app.
+///
+/// These are aliases onto [AppColors] so the group screens cannot drift away
+/// from the rest of the light theme.
 class GroupColors {
-  static const background = Color(0xFF0F172A);
-  static const surface = Color(0xFF1E293B);
-  static const surfaceAlt = Color(0xFF334155);
-  static const primary = Color(0xFF0D9488);
-  static const accent = Color(0xFF14B8A6);
-  static const muted = Color(0xFF94A3B8);
-  static const positive = Color(0xFF10B981);
-  static const negative = Color(0xFFF43F5E);
-  static const warning = Color(0xFFF59E0B);
+  static const background = AppColors.bgSecondary;
+  static const surface = AppColors.bgPrimary;
+  static const surfaceAlt = AppColors.bgSubtle;
+  static const primary = AppColors.primaryAccent;
+  static const accent = AppColors.primaryAccent;
+  static const muted = AppColors.muted;
+  static const positive = AppColors.success;
+  static const negative = AppColors.negative;
+  static const warning = AppColors.warning;
 }
 
 /// Shows a group's photo, falling back to a tinted icon for its type.
@@ -79,14 +85,14 @@ class GroupAvatar extends StatelessWidget {
             width: size,
             height: size,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => placeholder,
+            errorBuilder: (_, _, _) => placeholder,
           )
         : Image.network(
             photoUrl,
             width: size,
             height: size,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => placeholder,
+            errorBuilder: (_, _, _) => placeholder,
             loadingBuilder: (context, child, progress) =>
                 progress == null ? child : placeholder,
           );
@@ -172,14 +178,17 @@ class BalanceLimitBar extends StatelessWidget {
           children: [
             Text(
               label ?? 'Balance limit',
-              style: const TextStyle(color: GroupColors.muted, fontSize: 11),
+              style: const TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600),
             ),
             Text(
               '$currencySymbol${used.toStringAsFixed(0)} / $currencySymbol${limit.toStringAsFixed(0)}',
               style: TextStyle(
                 color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ],
@@ -189,7 +198,7 @@ class BalanceLimitBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: ratio,
-            minHeight: 6,
+            minHeight: 7,
             backgroundColor: GroupColors.surfaceAlt,
             valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
@@ -220,18 +229,8 @@ class MemberAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fallback = CircleAvatar(
-      radius: radius,
-      backgroundColor: GroupColors.surfaceAlt,
-      child: Text(
-        member.initials,
-        style: TextStyle(
-          fontSize: radius * 0.7,
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
+    final fallback =
+        AvatarWidget.forName(member.name, size: radius * 2);
 
     if (member.avatarUrl.isEmpty) return fallback;
 
@@ -248,7 +247,7 @@ class MemberAvatar extends StatelessWidget {
       radius: radius,
       backgroundColor: GroupColors.surfaceAlt,
       backgroundImage: NetworkImage(member.avatarUrl),
-      onBackgroundImageError: (_, __) {},
+      onBackgroundImageError: (_, _) {},
       child: null,
     );
   }
@@ -257,20 +256,10 @@ class MemberAvatar extends StatelessWidget {
 /// Shows a snackbar in the app's colours. Green for success, red for failure.
 void showGroupSnack(BuildContext context, String message, {bool success = true}) {
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor:
-            success ? GroupColors.primary : GroupColors.negative,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+  showAppSnack(context, message, success: success);
 }
 
-/// The standard dark-theme decoration for text fields on these screens.
+/// The standard decoration for text fields on the group screens.
 InputDecoration groupFieldDecoration({
   required String label,
   String? hint,
@@ -278,32 +267,26 @@ InputDecoration groupFieldDecoration({
   Widget? suffix,
   String? helper,
 }) {
+  OutlineInputBorder border(Color color, [double width = 1]) =>
+      OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderSide: BorderSide(color: color, width: width),
+      );
+
   return InputDecoration(
     labelText: label,
     hintText: hint,
     helperText: helper,
-    helperStyle: const TextStyle(color: GroupColors.muted, fontSize: 11),
-    labelStyle: const TextStyle(color: GroupColors.muted),
-    hintStyle: const TextStyle(color: Color(0xFF64748B)),
+    helperStyle: const TextStyle(color: AppColors.muted, fontSize: 12),
+    labelStyle: const TextStyle(color: AppColors.textTertiary),
+    hintStyle: const TextStyle(color: AppColors.muted),
     prefixIcon: prefix,
     suffixIcon: suffix,
     filled: true,
-    fillColor: GroupColors.background,
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: GroupColors.surfaceAlt),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: GroupColors.primary, width: 1.6),
-    ),
-    errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: GroupColors.negative),
-    ),
-    focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: GroupColors.negative, width: 1.6),
-    ),
+    fillColor: AppColors.inputBg,
+    enabledBorder: border(AppColors.border),
+    focusedBorder: border(AppColors.primaryAccent, 1.5),
+    errorBorder: border(AppColors.error),
+    focusedErrorBorder: border(AppColors.error, 1.5),
   );
 }

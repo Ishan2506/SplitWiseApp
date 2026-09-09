@@ -11,8 +11,8 @@ import 'join_group_screen.dart';
 /// Pulls the invite code out of a link, if it holds one.
 ///
 /// Two shapes are recognised, matching what the backend hands out:
-///   splitwise://join/<CODE>          — the app's own scheme
-///   https://<host>/join/<CODE>       — the web fallback / QR payload
+///   `splitwise://join/<CODE>` — the app's own scheme
+///   `https://<host>/join/<CODE>` — the web fallback / QR payload
 ///
 /// A `?code=` query is accepted as a last resort, so the same parsing serves
 /// both deep links and scanned QR codes.

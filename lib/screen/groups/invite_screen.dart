@@ -9,6 +9,7 @@ import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
+import '../../widgets/common_widgets.dart';
 import 'group_widgets.dart';
 
 /// Everything needed to get someone into a group: a scannable QR code, a
@@ -48,12 +49,12 @@ class _InviteScreenState extends State<InviteScreen> {
   }
 
   Future<void> _share(GroupModel group, GroupInvite invite) async {
-    final text = 'Join "${group.name}" on Splitwise.\n\n'
+    final text = 'Join "${group.name}" on PaisaSplit.\n\n'
         '${invite.link}\n\n'
         'Or enter this code in the app: ${invite.code}';
     try {
       await SharePlus.instance.share(
-        ShareParams(text: text, subject: 'Join ${group.name} on Splitwise'),
+        ShareParams(text: text, subject: 'Join ${group.name} on PaisaSplit'),
       );
     } catch (e) {
       if (mounted) {
@@ -67,28 +68,25 @@ class _InviteScreenState extends State<InviteScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1E),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Generate a new code?',
-            style: TextStyle(color: Colors.white)),
+        title: const Text('Generate a new code?'),
         content: const Text(
           'The current link and QR code will stop working straight away. '
           'Anyone who has not joined yet will need the new one.',
-          style: TextStyle(color: GroupColors.muted),
         ),
+        actionsPadding: const EdgeInsets.fromLTRB(
+            AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: GroupColors.muted)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
             style:
-                ElevatedButton.styleFrom(backgroundColor: GroupColors.primary),
-            child: const Text('Generate',
-                style: TextStyle(color: Colors.white)),
+                TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
+            child: const Text('Cancel'),
+          ),
+          PSButton(
+            label: 'Generate',
+            size: PSButtonSize.small,
+            expand: false,
+            onPressed: () => Navigator.pop(dialogContext, true),
           ),
         ],
       ),
@@ -97,8 +95,7 @@ class _InviteScreenState extends State<InviteScreen> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _busyWithCode = true);
-    final result =
-        await context.read<GroupProvider>().rotateInvite(group.id);
+    final result = await context.read<GroupProvider>().rotateInvite(group.id);
     if (!mounted) return;
     setState(() => _busyWithCode = false);
 
@@ -175,373 +172,342 @@ class _InviteScreenState extends State<InviteScreen> {
     final provider = context.watch<GroupProvider>();
     final stateManager = context.watch<StateManager>();
 
-    // Try to find group in GroupProvider first, then fall back to StateManager
-    final group = provider.groupById(widget.groupId) ??
-        stateManager.groups.firstWhere(
-          (g) => g.id == widget.groupId,
-          orElse: () => null as dynamic,
-        ) as GroupModel?;
+    // Only GroupProvider holds the API-backed GroupModel (with its invite);
+    // StateManager's list is the legacy local model and cannot serve here.
+    final group = provider.groupById(widget.groupId);
 
     if (group == null) {
-      return const Scaffold(
-        backgroundColor: const Color(0xFF0E0E10),
-        body: Center(
-          child: Text('This group is no longer available',
-              style: TextStyle(color: GroupColors.muted)),
+      return Scaffold(
+        appBar: AppBar(),
+        body: const EmptyStateWidget(
+          iconData: Icons.link_off_rounded,
+          title: 'Group unavailable',
+          subtitle: 'This group may have been deleted.',
         ),
       );
     }
 
-    final currentUserId = context.read<StateManager>().currentUserId;
+    final currentUserId = stateManager.currentUserId;
     final isCreator = group.isCreatedBy(currentUserId);
     final invite = group.invite;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0E0E10),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0E0E10),
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-          color: Colors.white,
-        ),
-        title: Text('Invite members',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            )),
-        centerTitle: false,
+        title: const Text('Invite members'),
         actions: [
           TextButton(
-            onPressed: () {
-              // Go back to Dashboard
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            },
-            child: const Text(
-              'Done',
-              style: TextStyle(
-                color: AppColors.primaryAccent,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            onPressed: () =>
+                Navigator.of(context).popUntil((route) => route.isFirst),
+            child: const Text('Done'),
           ),
+          const SizedBox(width: AppSpacing.xs),
         ],
       ),
       body: ListView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
         children: [
-          _buildGroupHeader(group),
-          const SizedBox(height: 20),
-          if (invite == null)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: CircularProgressIndicator(color: GroupColors.primary),
-              ),
-            )
-          else ...[
-            _buildQrCard(group, invite),
-            const SizedBox(height: 16),
-            _buildLinkCard(group, invite),
-            const SizedBox(height: 16),
-            if (isCreator) _buildCodeControls(group, invite),
-            if (isCreator) const SizedBox(height: 16),
-          ],
-          _buildContactInvite(group),
-          if (group.pendingInvites.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _buildPendingInvites(group),
-          ],
+          PageContainer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: AppSpacing.xs),
+                _GroupSummary(group: group),
+                const SizedBox(height: AppSpacing.md),
+                if (invite == null)
+                  const Padding(
+                    padding: EdgeInsets.all(AppSpacing.xxl),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else ...[
+                  _QrCard(
+                    group: group,
+                    invite: invite,
+                    onShare: () => _share(group, invite),
+                    onCopyCode: () => _copy(invite.code, 'Code'),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  _LinkCard(
+                    invite: invite,
+                    onCopy: () => _copy(invite.link, 'Link'),
+                  ),
+                  if (isCreator) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    _CodeControls(
+                      invite: invite,
+                      busy: _busyWithCode,
+                      onToggle: (v) => _toggleEnabled(group, v),
+                      onRotate: () => _rotate(group),
+                    ),
+                  ],
+                ],
+                const SizedBox(height: AppSpacing.xl),
+
+                const SectionHeader(
+                  title: 'Invite by email or mobile',
+                  subtitle: 'We will send them a link to join',
+                ),
+                _ContactInvite(
+                  controller: _contactController,
+                  sending: _sendingInvite,
+                  onSend: () => _sendInvite(group),
+                ),
+
+                if (group.pendingInvites.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.xl),
+                  SectionHeader(
+                    title: 'Pending invites',
+                    subtitle: '${group.pendingInvites.length} waiting to join',
+                  ),
+                  for (final pending in group.pendingInvites) ...[
+                    _PendingRow(
+                      invite: pending,
+                      onRevoke: () => _revoke(group, pending),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                  ],
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildGroupHeader(GroupModel group) {
-    return Row(
-      children: [
-        GroupAvatar(group: group, size: 52),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                group.name,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  GroupTypeChip(type: group.type, compact: true),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${group.members.length} '
-                    '${group.members.length == 1 ? 'member' : 'members'}',
-                    style: const TextStyle(
-                        color: GroupColors.muted, fontSize: 12),
-                  ),
-                ],
-              ),
-            ],
+class _GroupSummary extends StatelessWidget {
+  final GroupModel group;
+  const _GroupSummary({required this.group});
+
+  @override
+  Widget build(BuildContext context) {
+    return PSCard(
+      child: Row(
+        children: [
+          GroupAvatar(group: group, size: 44),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  group.name,
+                  style: Theme.of(context).textTheme.titleLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${group.members.length} member'
+                  '${group.members.length == 1 ? '' : 's'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
+}
 
-  Widget _buildQrCard(GroupModel group, GroupInvite invite) {
+/// The QR code plus the human-readable code beneath it.
+class _QrCard extends StatelessWidget {
+  final GroupModel group;
+  final GroupInvite invite;
+  final VoidCallback onShare;
+  final VoidCallback onCopyCode;
+
+  const _QrCard({
+    required this.group,
+    required this.invite,
+    required this.onShare,
+    required this.onCopyCode,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final active = invite.isActive;
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: GroupColors.surface,
-        borderRadius: BorderRadius.circular(18),
-      ),
+    return PSCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         children: [
-          const Text(
-            'Scan to join',
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Point the Splitwise scanner at this code',
-            style: TextStyle(color: GroupColors.muted, fontSize: 12),
-          ),
-          const SizedBox(height: 18),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              // The QR is drawn on white so scanners read it reliably.
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: QrImageView(
-                  data: invite.qrPayload,
-                  version: QrVersions.auto,
-                  size: 200,
-                  gapless: false,
-                  backgroundColor: Colors.white,
-                  eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.square,
-                    color: Color(0xFF0F172A),
-                  ),
-                  dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.square,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
+          if (!active)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: StatusBadge(
+                label: invite.isExpired ? 'Code expired' : 'Joining is off',
+                tone: BadgeTone.warning,
+                icon: Icons.info_outline_rounded,
               ),
-              // Make it obvious when the code will not currently work.
-              if (!active)
-                Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.72),
-                      alignment: Alignment.center,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.link_off,
-                              color: GroupColors.negative, size: 32),
-                          const SizedBox(height: 8),
-                          Text(
-                            invite.isExpired
-                                ? 'This code has expired'
-                                : 'Joining is turned off',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          // The code itself, for reading out loud or typing in.
-          InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => _copy(invite.code, 'Invite code'),
+            ),
+          Opacity(
+            opacity: active ? 1 : 0.4,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
-                color: GroupColors.background,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: GroupColors.surfaceAlt),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    invite.code,
-                    style: const TextStyle(
-                      color: const Color(0xFFEE2B6C),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 4,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Icon(Icons.copy, size: 16, color: GroupColors.muted),
-                ],
-              ),
-            ),
-          ),
-          if (invite.expiresAt != null && !invite.isExpired) ...[
-            const SizedBox(height: 10),
-            Text(
-              'Expires ${_formatExpiry(invite.expiresAt!)}',
-              style: const TextStyle(color: GroupColors.warning, fontSize: 11),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLinkCard(GroupModel group, GroupInvite invite) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: GroupColors.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Invite link',
-            style: TextStyle(
                 color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: GroupColors.background,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: GroupColors.surfaceAlt),
-            ),
-            child: Text(
-              invite.link,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: GroupColors.muted, fontSize: 12),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _copy(invite.link, 'Invite link'),
-                  icon: const Icon(Icons.copy, size: 18),
-                  label: const Text('Copy'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFEE2B6C),
-                    side: const BorderSide(color: Color(0xFFEE2B6C)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: QrImageView(
+                data: invite.qrPayload,
+                version: QrVersions.auto,
+                size: 180,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: AppColors.ink,
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: AppColors.ink,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _share(group, invite),
-                  icon: const Icon(Icons.share, size: 18),
-                  label: const Text('Share'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEE2B6C),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const OverlineLabel('Invite code'),
+          const SizedBox(height: 4),
+          GestureDetector(
+            onTap: onCopyCode,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  invite.code,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 3,
+                    color: AppColors.textPrimary,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: AppSpacing.xs),
+                const Icon(Icons.copy_rounded, size: 16, color: AppColors.muted),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          PSButton(
+            label: 'Share invite',
+            icon: Icons.ios_share_rounded,
+            size: PSButtonSize.medium,
+            onPressed: onShare,
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildCodeControls(GroupModel group, GroupInvite invite) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: GroupColors.surface,
-        borderRadius: BorderRadius.circular(16),
+class _LinkCard extends StatelessWidget {
+  final GroupInvite invite;
+  final VoidCallback onCopy;
+
+  const _LinkCard({required this.invite, required this.onCopy});
+
+  @override
+  Widget build(BuildContext context) {
+    return PSCard(
+      onTap: onCopy,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.bgSubtle,
+              borderRadius: BorderRadius.circular(AppRadius.xs),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(Icons.link_rounded,
+                size: 18, color: AppColors.textSecondary),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const OverlineLabel('Invite link'),
+                const SizedBox(height: 2),
+                Text(
+                  invite.link,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          const Icon(Icons.copy_rounded, size: 17, color: AppColors.muted),
+        ],
       ),
+    );
+  }
+}
+
+/// Owner-only controls: turn joining off, or roll the code.
+class _CodeControls extends StatelessWidget {
+  final GroupInvite invite;
+  final bool busy;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onRotate;
+
+  const _CodeControls({
+    required this.invite,
+    required this.busy,
+    required this.onToggle,
+    required this.onRotate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PSCard(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
       child: Column(
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Allow joining',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 2),
+                    Text('Allow joining',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 1),
                     Text(
                       'Turn off to stop new people using the link or code',
-                      style: TextStyle(color: GroupColors.muted, fontSize: 11),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
               Switch(
                 value: invite.enabled,
-                activeThumbColor: GroupColors.primary,
-                onChanged: _busyWithCode
-                    ? null
-                    : (value) => _toggleEnabled(group, value),
+                onChanged: busy ? null : onToggle,
               ),
             ],
           ),
-          const Divider(color: GroupColors.surfaceAlt, height: 24),
+          const Divider(height: AppSpacing.md),
           SizedBox(
             width: double.infinity,
             child: TextButton.icon(
-              onPressed: _busyWithCode ? null : () => _rotate(group),
-              icon: const Icon(Icons.autorenew, size: 18),
+              onPressed: busy ? null : onRotate,
+              icon: const Icon(Icons.autorenew_rounded, size: 17),
               label: const Text('Generate a new code'),
               style: TextButton.styleFrom(
-                foregroundColor: GroupColors.warning,
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                foregroundColor: AppColors.warning,
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
               ),
             ),
           ),
@@ -549,128 +515,99 @@ class _InviteScreenState extends State<InviteScreen> {
       ),
     );
   }
+}
 
-  Widget _buildContactInvite(GroupModel group) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: GroupColors.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Invite by email or mobile',
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold),
+class _ContactInvite extends StatelessWidget {
+  final TextEditingController controller;
+  final bool sending;
+  final VoidCallback onSend;
+
+  const _ContactInvite({
+    required this.controller,
+    required this.sending,
+    required this.onSend,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: PSTextField(
+            label: 'Contact',
+            showLabel: false,
+            placeholder: 'Email or 10-digit mobile',
+            controller: controller,
+            enabled: !sending,
+            textInputAction: TextInputAction.send,
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Anyone already on Splitwise joins straight away. Everyone else is '
-            'kept as a pending invite.',
-            style: TextStyle(color: GroupColors.muted, fontSize: 11),
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        SizedBox(
+          height: 54,
+          width: 54,
+          child: PSButton(
+            label: '',
+            icon: sending ? null : Icons.send_rounded,
+            isLoading: sending,
+            variant: PSButtonVariant.accent,
+            onPressed: sending ? null : onSend,
           ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _contactController,
-                  style: const TextStyle(color: Colors.white),
-                  keyboardType: TextInputType.emailAddress,
-                  onSubmitted: (_) => _sendInvite(group),
-                  decoration: groupFieldDecoration(
-                    label: 'Email or mobile',
-                    hint: 'friend@example.com',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _sendingInvite ? null : () => _sendInvite(group),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEE2B6C),
-                    disabledBackgroundColor: GroupColors.surfaceAlt,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: _sendingInvite
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.send, color: Colors.white, size: 20),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+}
 
-  Widget _buildPendingInvites(GroupModel group) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: GroupColors.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+class _PendingRow extends StatelessWidget {
+  final PendingInvite invite;
+  final VoidCallback onRevoke;
+
+  const _PendingRow({required this.invite, required this.onRevoke});
+
+  @override
+  Widget build(BuildContext context) {
+    return PSCard(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      child: Row(
         children: [
-          Text(
-            'Pending invites (${group.pendingInvites.length})',
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              color: AppColors.warningLight,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: const Icon(Icons.schedule_rounded,
+                size: 17, color: AppColors.warning),
           ),
-          const SizedBox(height: 6),
-          ...group.pendingInvites.map(
-            (invite) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const CircleAvatar(
-                radius: 18,
-                backgroundColor: GroupColors.surfaceAlt,
-                child: Icon(Icons.hourglass_empty,
-                    size: 16, color: GroupColors.warning),
-              ),
-              title: Text(invite.contact,
-                  style:
-                      const TextStyle(color: Colors.white, fontSize: 13)),
-              subtitle: const Text('Waiting to join',
-                  style:
-                      TextStyle(color: GroupColors.muted, fontSize: 11)),
-              trailing: IconButton(
-                icon: const Icon(Icons.close,
-                    size: 18, color: GroupColors.negative),
-                tooltip: 'Withdraw invite',
-                onPressed: () => _revoke(group, invite),
-              ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  invite.contact,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 1),
+                Text('Invitation pending',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
             ),
           ),
+          TextButton(
+            onPressed: onRevoke,
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Withdraw'),
+          ),
         ],
       ),
     );
-  }
-
-  String _formatExpiry(DateTime when) {
-    final diff = when.difference(DateTime.now());
-    if (diff.inDays > 0) {
-      return 'in ${diff.inDays} ${diff.inDays == 1 ? 'day' : 'days'}';
-    }
-    if (diff.inHours > 0) {
-      return 'in ${diff.inHours} ${diff.inHours == 1 ? 'hour' : 'hours'}';
-    }
-    if (diff.inMinutes > 0) return 'in ${diff.inMinutes} min';
-    return 'shortly';
   }
 }

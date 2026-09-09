@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/state_manager.dart';
 import '../theme/app_theme.dart';
-import 'authentication/login_screen.dart';
-import 'Dashboard/dashboard_screen.dart';
+import '../utils/app_constants.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -27,34 +26,32 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _setupAnimations() {
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 900),
       vsync: this,
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
     );
 
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
-        .animate(
-          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-        );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    );
 
     _animationController.forward();
   }
 
   Future<void> _navigateAfterSplash() async {
-    await Future.delayed(const Duration(seconds: 3));
-
+    await Future.delayed(const Duration(milliseconds: 1800));
     if (!mounted) return;
 
     final state = Provider.of<StateManager>(context, listen: false);
-
-    if (state.isLoggedIn) {
-      Navigator.pushReplacementNamed(context, '/dashboard');
-    } else {
-      Navigator.pushReplacementNamed(context, '/login');
-    }
+    Navigator.pushReplacementNamed(
+      context,
+      state.isLoggedIn ? '/dashboard' : '/login',
+    );
   }
 
   @override
@@ -66,134 +63,58 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment(0.0, -0.5),
-            end: Alignment(0.0, 1.0),
-            colors: [
-              Color(0xFFFFE3EC), // Soft pink
-              Color(0xFFFDF1F4), // Light pink
-              Color(0xFFFFFFFF), // White
-            ],
-            stops: [0.0, 0.42, 1.0],
-          ),
-        ),
-        child: Center(
+      backgroundColor: AppColors.bgPrimary,
+      body: Center(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
           child: SlideTransition(
             position: _slideAnimation,
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Logo Icon
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color(0xFF1A1512), // Your brand: #1A1512
-                              AppColors.primaryAccent, // Your brand: #EE2B6C
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primaryAccent.withValues(alpha: 0.3),
-                              blurRadius: 24,
-                              offset: const Offset(0, 12),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.currency_rupee,
-                          size: 40,
-                          color: Colors.white,
-                        ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                  horizontal: AppBreakpoints.pagePadding(context)),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryAccent,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      '₹',
+                      style: TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
                       ),
-                      const SizedBox(height: 32),
-
-                      // App Name
-                      RichText(
-                        textAlign: TextAlign.center,
-                        text: const TextSpan(
-                          style: TextStyle(
-                            fontSize: 42,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.02,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: 'Paisa',
-                              style: TextStyle(color: Color(0xFF1A1512)), // Your brand: #1A1512
-                            ),
-                            TextSpan(
-                              text: 'Split',
-                              style:
-                                  TextStyle(color: AppColors.primaryAccent), // Your brand: #EE2B6C
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Tagline
-                      const Text(
-                        'Share the bill,\nnot the stress',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1A1512), // Your brand: #1A1512
-                          height: 1.3,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Subtitle
-                      const Text(
-                        'Add an expense in seconds. PaisaSplit keeps track of who paid, who owes, and how to square up.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFF6B5F56), // Your brand: #6B5F56
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 48),
-
-                      // Loading indicator
-                      SizedBox(
-                        width: 50,
-                        height: 50,
-                        child: CircularProgressIndicator(
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            AppColors.primaryAccent,
-                          ),
-                          strokeWidth: 3,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Loading text
-                      const Text(
-                        'Setting up your session...',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF6B5F56), // Your brand: #6B5F56
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'Share the bill,\nnot the stress',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.displayMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 320),
+                    child: Text(
+                      'Add an expense in seconds. PaisaSplit keeps track of who '
+                      'paid, who owes, and how to square up.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xxxl),
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                ],
               ),
             ),
           ),

@@ -6,11 +6,48 @@ import '../model/group_model.dart';
 import '../model/user_model.dart';
 import '../network/api_service.dart';
 
+/// What kind of event a notification describes. Drives its icon and tint.
+enum ActivityKind { expenseAdded, settled, edited, memberJoined, groupCreated }
+
+/// One row in the Activity tab.
+class AppNotification {
+  final String id;
+  final ActivityKind kind;
+  final String title;
+  final String subtitle;
+  final DateTime time;
+  bool isRead;
+
+  AppNotification({
+    required this.id,
+    required this.kind,
+    required this.title,
+    required this.subtitle,
+    required this.time,
+    this.isRead = false,
+  });
+
+  /// "2 min ago", "Yesterday", "3 days ago" — relative to now.
+  String get relativeTime {
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) {
+      return '${diff.inHours} hr${diff.inHours == 1 ? '' : 's'} ago';
+    }
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    if (diff.inDays < 14) return 'Last week';
+    return '${(diff.inDays / 7).floor()} weeks ago';
+  }
+}
+
 class StateManager extends ChangeNotifier {
   final List<Member> _members = [];
   final List<Group> _groups = [];
   final List<Expense> _expenses = [];
   final List<Payment> _payments = [];
+  final List<AppNotification> _notifications = [];
 
   String _currentUserId = 'm1';
   bool _isLoggedIn = false;
@@ -19,6 +56,7 @@ class StateManager extends ChangeNotifier {
 
   StateManager() {
     _loadMockData();
+    _seedNotifications();
     _initializeSession();
   }
 
@@ -564,5 +602,95 @@ class StateManager extends ChangeNotifier {
     }
 
     return simplified;
+  }
+
+  // ----- Activity feed ---------------------------------------------------
+
+  List<AppNotification> get notifications =>
+      List.unmodifiable(_notifications);
+
+  int get unreadNotificationCount =>
+      _notifications.where((n) => !n.isRead).length;
+
+  void markAllNotificationsRead() {
+    if (unreadNotificationCount == 0) return;
+    for (final n in _notifications) {
+      n.isRead = true;
+    }
+    notifyListeners();
+  }
+
+  void markNotificationRead(String id) {
+    for (final n in _notifications) {
+      if (n.id == id && !n.isRead) {
+        n.isRead = true;
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  /// Records an event so it shows up in the Activity tab.
+  void pushNotification({
+    required ActivityKind kind,
+    required String title,
+    required String subtitle,
+  }) {
+    _notifications.insert(
+      0,
+      AppNotification(
+        id: 'n${DateTime.now().microsecondsSinceEpoch}',
+        kind: kind,
+        title: title,
+        subtitle: subtitle,
+        time: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+  }
+
+  void _seedNotifications() {
+    final now = DateTime.now();
+    _notifications.addAll([
+      AppNotification(
+        id: 'n1',
+        kind: ActivityKind.expenseAdded,
+        title: 'Rahul added "Beach shack dinner"',
+        subtitle: '₹4,800 · your share ₹1,200',
+        time: now.subtract(const Duration(minutes: 2)),
+      ),
+      AppNotification(
+        id: 'n2',
+        kind: ActivityKind.settled,
+        title: 'Priya settled ₹800 with you',
+        subtitle: 'Balances updated',
+        time: now.subtract(const Duration(hours: 1)),
+        isRead: true,
+      ),
+      AppNotification(
+        id: 'n3',
+        kind: ActivityKind.edited,
+        title: 'Aman edited "Groceries"',
+        subtitle: '₹2,100 → ₹2,350',
+        time: now.subtract(const Duration(days: 1)),
+        isRead: true,
+      ),
+      AppNotification(
+        id: 'n4',
+        kind: ActivityKind.memberJoined,
+        title: 'Sneha joined Goa Trip 2026',
+        subtitle: 'Invited by you',
+        time: now.subtract(const Duration(days: 2)),
+        isRead: true,
+      ),
+      AppNotification(
+        id: 'n5',
+        kind: ActivityKind.groupCreated,
+        title: 'You were added to Team lunches',
+        subtitle: '8 members',
+        time: now.subtract(const Duration(days: 3)),
+        isRead: true,
+      ),
+    ]);
   }
 }

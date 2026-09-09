@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../network/api_service.dart';
+import '../../theme/app_theme.dart';
+import '../../utils/app_constants.dart';
+import '../../widgets/common_widgets.dart';
+import 'auth_widgets.dart';
 import 'login_screen.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final String email;
-  const ResetPasswordScreen({Key? key, required this.email}) : super(key: key);
+  const ResetPasswordScreen({super.key, required this.email});
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -15,9 +19,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _tokenController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+
   bool _isLoading = false;
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -27,10 +31,13 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     super.dispose();
   }
 
-  void _handleResetPassword() async {
+  Future<void> _handleResetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     final result = await ApiService.resetPassword(
       email: widget.email,
@@ -38,256 +45,127 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       password: _passwordController.text,
     );
 
-    if (mounted) {
-      setState(() => _isLoading = false);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Color(0xFF0D9488),
-            content: Text('Password reset successfully. Please log in.'),
-          ),
-        );
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-          (route) => false,
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.redAccent,
-            content: Text(result['message'] ?? 'Failed to reset password'),
-          ),
-        );
-      }
+    if (result['success'] == true) {
+      showAppSnack(context, 'Password reset — please sign in');
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    } else {
+      setState(() =>
+          _errorMessage = result['message'] ?? 'Failed to reset password');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0D9488)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: [0.1, 0.6, 1.2],
+    return AuthScaffold(
+      showBack: true,
+      title: 'Set a new password',
+      subtitle: 'Enter the code we sent and choose a new password.',
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+          margin: const EdgeInsets.only(bottom: AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.bgSecondary,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: AppColors.border),
           ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Logo
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0D9488),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF0D9488).withOpacity(0.4),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.lock,
-                          size: 48,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Title
-                    const Text(
-                      'Reset Password',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Subtitle
-                    Text(
-                      'Enter the reset token from your email',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF94A3B8),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Input Card
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.06),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withOpacity(0.1)),
-                      ),
-                      child: Column(
-                        children: [
-                          // Reset Token Field
-                          TextFormField(
-                            controller: _tokenController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              labelText: 'Reset Token',
-                              labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                              hintText: 'Paste the token from your reset email',
-                              hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                              prefixIcon: const Icon(Icons.vpn_key, color: Color(0xFF0D9488)),
-                              enabledBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
-                              ),
-                              focusedBorder: const UnderlineInputBorder(
-                                borderSide: BorderSide(color: Color(0xFF0D9488)),
-                              ),
-                            ),
-                            validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
-                                return 'Please enter the reset token';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-
-                          // New Password Field
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              labelText: 'New Password',
-                              labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                              prefixIcon: const Icon(Icons.lock, color: Color(0xFF0D9488)),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                                  color: const Color(0xFF94A3B8),
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                              ),
-                              enabledBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
-                              ),
-                              focusedBorder: const UnderlineInputBorder(
-                                borderSide: BorderSide(color: Color(0xFF0D9488)),
-                              ),
-                            ),
-                            validator: (val) {
-                              if (val == null || val.isEmpty) {
-                                return 'Please enter your new password';
-                              }
-                              if (val.length < 8) {
-                                return 'Password must be at least 8 characters';
-                              }
-                              final reg = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$');
-                              if (!reg.hasMatch(val)) {
-                                return 'Must contain 1 uppercase, 1 lowercase, 1 digit & 1 special char';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Confirm Password Field
-                          TextFormField(
-                            controller: _confirmPasswordController,
-                            obscureText: _obscureConfirmPassword,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              labelText: 'Confirm Password',
-                              labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                              prefixIcon: const Icon(Icons.lock, color: Color(0xFF0D9488)),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
-                                  color: const Color(0xFF94A3B8),
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _obscureConfirmPassword = !_obscureConfirmPassword;
-                                  });
-                                },
-                              ),
-                              enabledBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
-                              ),
-                              focusedBorder: const UnderlineInputBorder(
-                                borderSide: BorderSide(color: Color(0xFF0D9488)),
-                              ),
-                            ),
-                            validator: (val) {
-                              if (val == null || val.isEmpty) {
-                                return 'Please confirm your password';
-                              }
-                              if (val != _passwordController.text) {
-                                return 'Passwords do not match';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Reset Button
-                    if (_isLoading)
-                      const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)))
-                    else
-                      ElevatedButton(
-                        onPressed: _handleResetPassword,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0D9488),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 4,
-                        ),
-                        child: const Text(
-                          'Reset Password',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                  ],
+          child: Row(
+            children: [
+              const Icon(Icons.mail_outline_rounded,
+                  size: 17, color: AppColors.muted),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  widget.email,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
+            ],
           ),
         ),
-      ),
+        Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_errorMessage != null)
+                AuthErrorBanner(message: _errorMessage!),
+              PSTextField(
+                label: 'Reset code',
+                placeholder: 'Paste the code from your email',
+                controller: _tokenController,
+                enabled: !_isLoading,
+                autofocus: true,
+                textInputAction: TextInputAction.next,
+                validator: (val) => (val == null || val.trim().isEmpty)
+                    ? 'Please enter the reset code'
+                    : null,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              PSTextField(
+                label: 'New password',
+                placeholder: 'Create a strong password',
+                controller: _passwordController,
+                obscureText: true,
+                enabled: !_isLoading,
+                textInputAction: TextInputAction.next,
+                validator: (val) {
+                  if (val == null || val.isEmpty) {
+                    return 'Please enter your new password';
+                  }
+                  if (val.length < 8) {
+                    return 'Password must be at least 8 characters';
+                  }
+                  final reg = RegExp(
+                    r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$',
+                  );
+                  if (!reg.hasMatch(val)) {
+                    return 'Must contain 1 uppercase, 1 lowercase, 1 digit & 1 special char';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpacing.md),
+              PSTextField(
+                label: 'Confirm password',
+                placeholder: 'Re-enter your new password',
+                controller: _confirmPasswordController,
+                obscureText: true,
+                enabled: !_isLoading,
+                textInputAction: TextInputAction.done,
+                validator: (val) {
+                  if (val == null || val.isEmpty) {
+                    return 'Please confirm your password';
+                  }
+                  if (val != _passwordController.text) {
+                    return 'Passwords do not match';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              PSButton(
+                label: 'Reset password',
+                onPressed: _isLoading ? null : _handleResetPassword,
+                isLoading: _isLoading,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

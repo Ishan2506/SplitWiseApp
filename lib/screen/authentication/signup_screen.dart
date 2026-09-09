@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../network/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
 import '../../widgets/common_widgets.dart';
+import 'auth_widgets.dart';
 
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({Key? key}) : super(key: key);
+  const SignupScreen({super.key});
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
@@ -19,6 +21,8 @@ class _SignupScreenState extends State<SignupScreen> {
   final _passwordController = TextEditingController();
 
   bool _isAuthenticating = false;
+  String? _errorMessage;
+  String _password = '';
 
   @override
   void dispose() {
@@ -37,6 +41,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
     setState(() {
       _isAuthenticating = true;
+      _errorMessage = null;
     });
 
     final result = await ApiService.register(
@@ -46,211 +51,193 @@ class _SignupScreenState extends State<SignupScreen> {
       password: _passwordController.text,
     );
 
-    if (mounted) {
-      setState(() {
-        _isAuthenticating = false;
-      });
+    if (!mounted) return;
+    setState(() => _isAuthenticating = false);
 
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account created successfully! Please login.'),
-            backgroundColor: AppColors.primaryAccent,
-          ),
-        );
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Registration failed'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+    if (result['success'] == true) {
+      showAppSnack(context, 'Account created — please sign in');
+      Navigator.pop(context);
+    } else {
+      setState(() =>
+          _errorMessage = result['message'] ?? 'Registration failed');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment(0.0, -0.5),
-            end: Alignment(0.0, 1.0),
-            colors: [
-              Color(0xFFFFE3EC), // Your HTML: #ffe3ec
-              Color(0xFFFDF1F4), // Your HTML: #fdf1f4
-              Color(0xFFFFFFFF), // Your HTML: #ffffff
+    return AuthScaffold(
+      showBack: true,
+      title: 'Create your account',
+      subtitle: 'Join PaisaSplit and start splitting bills.',
+      footer: AuthFooterPrompt(
+        question: 'Already have an account?',
+        action: 'Sign in',
+        onTap: () => Navigator.pop(context),
+      ),
+      children: [
+        Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_errorMessage != null)
+                AuthErrorBanner(message: _errorMessage!),
+              PSTextField(
+                label: 'Full name',
+                placeholder: 'Enter your name',
+                controller: _nameController,
+                enabled: !_isAuthenticating,
+                textInputAction: TextInputAction.next,
+                validator: (val) => (val == null || val.trim().isEmpty)
+                    ? 'Please enter your name'
+                    : null,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              PSTextField(
+                label: 'Email',
+                placeholder: 'you@example.com',
+                helperText: 'Email or mobile — at least one is required',
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                enabled: !_isAuthenticating,
+                textInputAction: TextInputAction.next,
+                validator: (val) {
+                  if (val != null && val.isNotEmpty) {
+                    final emailRegex = RegExp(
+                      r'^[a-zA-Z0-9][a-zA-Z0-9._%-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$',
+                    );
+                    if (!emailRegex.hasMatch(val.trim())) {
+                      return 'Enter a valid email address';
+                    }
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpacing.md),
+              PSTextField(
+                label: 'Mobile',
+                placeholder: '9876543210',
+                controller: _mobileController,
+                keyboardType: TextInputType.phone,
+                enabled: !_isAuthenticating,
+                maxLength: 10,
+                textInputAction: TextInputAction.next,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: (val) {
+                  if (val != null && val.isNotEmpty) {
+                    final reg = RegExp(r'^[6-9]\d{9}$');
+                    if (val.length != 10) {
+                      return 'Mobile number must be exactly 10 digits';
+                    }
+                    if (!reg.hasMatch(val.trim())) {
+                      return 'Mobile number must start with 6-9';
+                    }
+                  } else if (_emailController.text.trim().isEmpty) {
+                    return 'Please provide email or mobile number';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpacing.md),
+              PSTextField(
+                label: 'Password',
+                placeholder: 'Create a strong password',
+                controller: _passwordController,
+                obscureText: true,
+                enabled: !_isAuthenticating,
+                textInputAction: TextInputAction.done,
+                onChanged: (v) => setState(() => _password = v),
+                validator: (val) {
+                  if (val == null || val.isEmpty) {
+                    return 'Please enter your password';
+                  }
+                  if (val.length < 8) {
+                    return 'Password must be at least 8 characters';
+                  }
+                  final reg = RegExp(
+                    r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$',
+                  );
+                  if (!reg.hasMatch(val)) {
+                    return 'Must contain uppercase, lowercase, digit & special char';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _PasswordChecklist(password: _password),
+              const SizedBox(height: AppSpacing.lg),
+              PSButton(
+                label: 'Create account',
+                onPressed: _isAuthenticating ? null : _handleSignup,
+                isLoading: _isAuthenticating,
+              ),
             ],
-            stops: [0.0, 0.42, 1.0],
           ),
         ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-                vertical: AppSpacing.lg,
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Back Button
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back),
-                        onPressed: () => Navigator.pop(context),
-                        color: AppColors.textPrimary,
+      ],
+    );
+  }
+}
+
+/// Shows the password rules as they are met, so the requirements are visible
+/// before the user submits rather than only in an error message afterwards.
+class _PasswordChecklist extends StatelessWidget {
+  final String password;
+
+  const _PasswordChecklist({required this.password});
+
+  @override
+  Widget build(BuildContext context) {
+    final rules = <String, bool>{
+      'At least 8 characters': password.length >= 8,
+      'Upper & lowercase letter':
+          RegExp(r'[a-z]').hasMatch(password) &&
+              RegExp(r'[A-Z]').hasMatch(password),
+      'A number': RegExp(r'\d').hasMatch(password),
+      'A special character (@\$!%*?&#)':
+          RegExp(r'[@$!%*?&#]').hasMatch(password),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final entry in rules.entries)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Icon(
+                    entry.value
+                        ? Icons.check_circle_rounded
+                        : Icons.circle_outlined,
+                    size: 14,
+                    color: entry.value ? AppColors.success : AppColors.muted,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      entry.key,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: entry.value
+                            ? AppColors.success
+                            : AppColors.textTertiary,
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.md),
-
-                    // Title
-                    Text(
-                      'Create your account',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                            color: AppColors.textPrimary,
-                          ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-
-                    // Subtitle
-                    Text(
-                      'Join PaisaSplit and start splitting bills.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                    ),
-                    const SizedBox(height: AppSpacing.xxl),
-
-                    // Name Input
-                    PSTextField(
-                      label: 'Full Name',
-                      placeholder: 'Enter your name',
-                      controller: _nameController,
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) {
-                          return 'Please enter your name';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-
-                    // Email Input
-                    PSTextField(
-                      label: 'Email (Optional)',
-                      placeholder: 'Enter your email',
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (val) {
-                        if (val != null && val.isNotEmpty) {
-                          final emailRegex = RegExp(
-                            r'^[a-zA-Z0-9][a-zA-Z0-9._%-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$',
-                          );
-                          if (!emailRegex.hasMatch(val.trim())) {
-                            return 'Enter a valid email address';
-                          }
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-
-                    // Mobile Input
-                    PSTextField(
-                      label: 'Mobile (Optional)',
-                      placeholder: '10 digits, e.g. 9876543210',
-                      controller: _mobileController,
-                      keyboardType: TextInputType.phone,
-                      validator: (val) {
-                        if (val != null && val.isNotEmpty) {
-                          final reg = RegExp(r'^[6-9]\d{9}$');
-                          if (val.length != 10) {
-                            return 'Mobile number must be exactly 10 digits';
-                          }
-                          if (!reg.hasMatch(val.trim())) {
-                            return 'Mobile number must start with 6-9';
-                          }
-                        } else {
-                          final email = _emailController.text.trim();
-                          if (email.isEmpty) {
-                            return 'Please provide email or mobile number';
-                          }
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-
-                    // Password Input
-                    PSTextField(
-                      label: 'Password',
-                      placeholder: 'Create a strong password',
-                      controller: _passwordController,
-                      obscureText: true,
-                      validator: (val) {
-                        if (val == null || val.isEmpty) {
-                          return 'Please enter your password';
-                        }
-                        if (val.length < 8) {
-                          return 'Password must be at least 8 characters';
-                        }
-                        final reg = RegExp(
-                          r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$',
-                        );
-                        if (!reg.hasMatch(val)) {
-                          return 'Must contain uppercase, lowercase, digit & special char';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.xxl),
-
-                    // Sign Up Button
-                    PSButton(
-                      label: 'Create Account',
-                      onPressed: _handleSignup,
-                      isLoading: _isAuthenticating,
-                      isEnabled: !_isAuthenticating,
-                      isPrimary: true,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-
-                    // Login Navigation
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Already have an account? ',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text(
-                            'Sign in',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primaryAccent,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ),
+        ],
       ),
     );
   }
