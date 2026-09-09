@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../state/state_manager.dart';
 import '../../screen/Dashboard/dashboard_screen.dart';
-import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
 import '../../widgets/common_widgets.dart';
 import 'auth_widgets.dart';
@@ -117,23 +116,13 @@ class _LoginScreenState extends State<LoginScreen> {
     return AuthScaffold(
       title: 'Welcome back',
       subtitle: 'Sign in to keep your groups in sync.',
-      footer: Column(
-        children: [
-          AuthFooterPrompt(
-            question: "Don't have an account?",
-            action: 'Sign up',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const SignupScreen()),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          TextButton(
-            onPressed: state.bypassLogin,
-            style: TextButton.styleFrom(foregroundColor: AppColors.muted),
-            child: const Text('Explore demo mode'),
-          ),
-        ],
+      footer: AuthFooterPrompt(
+        question: "Don't have an account?",
+        action: 'Sign up',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SignupScreen()),
+        ),
       ),
       children: [
         Form(

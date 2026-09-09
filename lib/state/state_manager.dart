@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../model/group_model.dart';
 import '../model/user_model.dart';
@@ -57,8 +56,15 @@ class StateManager extends ChangeNotifier {
   StateManager() {
     _loadMockData();
     _seedNotifications();
-    _initializeSession();
+    _sessionRestored = _initializeSession();
   }
+
+  /// Completes once the stored token has been loaded and validated.
+  ///
+  /// The splash screen awaits this before deciding where to route, otherwise a
+  /// slow `/auth/me` call would make an already-signed-in user land on login.
+  late final Future<void> _sessionRestored;
+  Future<void> get sessionRestored => _sessionRestored;
 
   /// Invoked on sign-out so other providers can clear their own state.
   /// Wired up in `main.dart`.
@@ -67,16 +73,36 @@ class StateManager extends ChangeNotifier {
   String? get authErrorMessage => _authErrorMessage;
   UserModel? get currentUserModel => _currentUserModel;
 
+  /// Restores a stored session. Never completes with an error: the splash
+  /// screen awaits this before routing, so a thrown exception here would leave
+  /// the user staring at the splash screen forever.
   Future<void> _initializeSession() async {
-    await ApiService.init();
-    final result = await ApiService.getMe();
-    if (result['success'] == true) {
-      final user = result['user'] as UserModel;
-      _currentUserModel = user;
-      _updateOrAddUserModel(user);
-      _currentUserId = user.id;
-      _isLoggedIn = true;
-      notifyListeners();
+    try {
+      await ApiService.init();
+      if (ApiService.token == null) return;
+
+      final result = await ApiService.getMe();
+      final user = result['success'] == true ? result['user'] : null;
+      if (user is UserModel) {
+        _currentUserModel = user;
+        _updateOrAddUserModel(user);
+        _currentUserId = user.id;
+        _isLoggedIn = true;
+        notifyListeners();
+        return;
+      }
+
+      // The call failed. `getMe` only clears the token when the server actually
+      // rejected it (401), so if the token is still there this was a network or
+      // server problem — stay signed in rather than forcing a needless re-login.
+      if (ApiService.token != null) {
+        _isLoggedIn = true;
+        notifyListeners();
+      }
+    } catch (e) {
+      // Corrupt storage, an unexpected payload shape — nothing here is worth
+      // blocking startup over. Fall through to the login screen.
+      debugPrint('Session restore failed: $e');
     }
   }
 
@@ -121,12 +147,6 @@ class StateManager extends ChangeNotifier {
     }
   }
 
-  void bypassLogin() {
-    _currentUserId = 'm1';
-    _isLoggedIn = true;
-    notifyListeners();
-  }
-
   // Getters
   List<Member> get members => _members;
   List<Group> get groups => _groups;
@@ -135,7 +155,37 @@ class StateManager extends ChangeNotifier {
   String get currentUserId => _currentUserId;
   bool get isLoggedIn => _isLoggedIn;
 
-  Member get currentUser => _members.firstWhere((m) => m.id == _currentUserId);
+  /// The signed-in user as a [Member].
+  ///
+  /// After a real login `_currentUserId` is a server-issued id that is not in
+  /// the seeded member list, and the list is only filled in once groups load.
+  /// Falling back to the authenticated profile (and finally to a placeholder)
+  /// keeps this from throwing and blanking whatever screen is building.
+  Member get currentUser {
+    for (final m in _members) {
+      if (m.id == _currentUserId) return m;
+    }
+
+    final user = _currentUserModel;
+    final name = user?.name.trim();
+    return Member(
+      id: _currentUserId,
+      name: (name == null || name.isEmpty) ? 'You' : name,
+      email: user?.email ?? '',
+      avatarUrl: (user != null && user.avatarUrl.isNotEmpty)
+          ? user.avatarUrl
+          : 'https://api.dicebear.com/7.x/initials/svg?seed='
+              '${(name == null || name.isEmpty) ? 'You' : name}',
+    );
+  }
+
+  /// Looks up any member by id, returning null instead of throwing.
+  Member? memberById(String id) {
+    for (final m in _members) {
+      if (m.id == id) return m;
+    }
+    return null;
+  }
 
   void setCurrentUser(String id) {
     _currentUserId = id;
@@ -215,9 +265,9 @@ class StateManager extends ChangeNotifier {
     } catch (_) {
       // Ignore — user may not have logged in via Google.
     }
+    // `clearToken` removes the only persisted session key. A blanket
+    // `prefs.clear()` here would also wipe unrelated user settings.
     await ApiService.clearToken();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
     _currentUserModel = null;
     _isLoggedIn = false;
     onSignedOut?.call();
@@ -539,7 +589,9 @@ class StateManager extends ChangeNotifier {
     // Filter to include only members in the group (if groupId specified)
     List<String> relevantMemberIds;
     if (groupId != null) {
-      final grp = _groups.firstWhere((g) => g.id == groupId);
+      final grp = _groups.where((g) => g.id == groupId).firstOrNull;
+      // An unknown group has no members to simplify debts between.
+      if (grp == null) return [];
       relevantMemberIds = grp.memberIds;
     } else {
       relevantMemberIds = _members.map((m) => m.id).toList();
@@ -581,13 +633,16 @@ class StateManager extends ChangeNotifier {
       final minAmount = oweAmount < creditAmount ? oweAmount : creditAmount;
 
       if (minAmount > 0.01) {
-        final fromMem = _members.firstWhere((m) => m.id == debtorId);
-        final toMem = _members.firstWhere((m) => m.id == creditorId);
-        simplified.add({
-          'from': fromMem,
-          'to': toMem,
-          'amount': double.parse(minAmount.toStringAsFixed(2)),
-        });
+        final fromMem = memberById(debtorId);
+        final toMem = memberById(creditorId);
+        // Skip pairs we have no profile for rather than throwing mid-render.
+        if (fromMem != null && toMem != null) {
+          simplified.add({
+            'from': fromMem,
+            'to': toMem,
+            'amount': double.parse(minAmount.toStringAsFixed(2)),
+          });
+        }
       }
 
       dVals[dIdx] += minAmount;

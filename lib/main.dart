@@ -8,6 +8,12 @@ import 'screen/authentication/login_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
+  // Required: StateManager reads the saved auth token from SharedPreferences
+  // in its constructor, and that platform channel is unusable until the
+  // binding exists. Without this the read throws and the stored session is
+  // silently discarded, sending signed-in users back to the login screen.
+  WidgetsFlutterBinding.ensureInitialized();
+
   final stateManager = StateManager();
   final groupProvider = GroupProvider()
     // Keep the legacy expense/settle-up screens pointed at the real groups.

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/state_manager.dart';
@@ -44,10 +46,27 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _navigateAfterSplash() async {
+    final state = Provider.of<StateManager>(context, listen: false);
+
+    // Hold the splash for the branding animation and for the restore of any
+    // stored session. Routing on the timer alone would send an already
+    // signed-in user to login whenever `/auth/me` was slow to answer.
+    //
+    // Every wait here is failure-proof on purpose: whatever goes wrong, we
+    // must still navigate, or the user is stranded on the splash screen.
     await Future.delayed(const Duration(milliseconds: 1800));
+
+    try {
+      // Longer than the 10s bound on the /auth/me request itself, so the
+      // normal slow-network path resolves cleanly; this is the last-resort
+      // guard against a future await that never completes.
+      await state.sessionRestored.timeout(const Duration(seconds: 12));
+    } catch (e) {
+      debugPrint('Waiting for session restore failed: $e');
+    }
+
     if (!mounted) return;
 
-    final state = Provider.of<StateManager>(context, listen: false);
     Navigator.pushReplacementNamed(
       context,
       state.isLoggedIn ? '/dashboard' : '/login',

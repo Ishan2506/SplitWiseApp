@@ -25,19 +25,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   static const _tabs = [
     _NavItem('Groups', Icons.groups_rounded, Icons.groups_outlined),
-    _NavItem('Activity', Icons.notifications_rounded,
-        Icons.notifications_none_rounded),
-    _NavItem('History', Icons.receipt_long_rounded,
-        Icons.receipt_long_outlined),
+    _NavItem(
+      'Activity',
+      Icons.notifications_rounded,
+      Icons.notifications_none_rounded,
+    ),
+    _NavItem(
+      'History',
+      Icons.receipt_long_rounded,
+      Icons.receipt_long_outlined,
+    ),
     _NavItem('Profile', Icons.person_rounded, Icons.person_outline_rounded),
   ];
 
   Widget _pageFor(int index) => switch (index) {
-        0 => const DashboardTab(),
-        1 => const ActivityTab(),
-        2 => const HistoryTab(),
-        _ => const ProfileScreen(embedded: true),
-      };
+    0 => const DashboardTab(),
+    1 => const ActivityTab(),
+    2 => const HistoryTab(),
+    _ => const ProfileScreen(embedded: true),
+  };
 
   Future<void> _openAddSheet() async {
     final choice = await showModalBottomSheet<String>(
@@ -66,14 +72,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Leave PaisaSplit?'),
-        content: const Text('Your groups and balances will be here when you '
-            'come back.'),
+        content: const Text(
+          'Your groups and balances will be here when you '
+          'come back.',
+        ),
         actionsPadding: const EdgeInsets.fromLTRB(
-            AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+          AppSpacing.md,
+          0,
+          AppSpacing.md,
+          AppSpacing.md,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+            ),
             child: const Text('Stay'),
           ),
           PSButton(
@@ -187,7 +201,9 @@ class _BrandMark extends StatelessWidget {
   }
 }
 
-/// Dark bottom bar with a raised centre action, from the reference design.
+/// White bottom bar with a raised dark centre action, from the reference
+/// design: uppercase labels, a pink underline marking the active tab, and the
+/// add button straddling the bar's top edge.
 class _BottomBar extends StatelessWidget {
   final List<_NavItem> items;
   final int currentIndex;
@@ -203,49 +219,49 @@ class _BottomBar extends StatelessWidget {
     required this.onAdd,
   });
 
+  static const double _fabSize = 56;
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.ink,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      padding: EdgeInsets.only(
-        top: AppSpacing.sm,
-        bottom: bottomInset > 0 ? bottomInset : AppSpacing.sm,
-        left: AppSpacing.xs,
-        right: AppSpacing.xs,
-      ),
-      child: Row(
-        children: [
-          _tab(0),
-          _tab(1),
-          Expanded(
-            child: Center(
-              child: Tooltip(
-                message: 'Add expense or group',
-                child: Material(
-                  color: AppColors.primaryAccent,
-                  shape: const CircleBorder(),
-                  child: InkWell(
-                    onTap: onAdd,
-                    customBorder: const CircleBorder(),
-                    child: const SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Icon(Icons.add_rounded,
-                          color: Colors.white, size: 26),
-                    ),
-                  ),
-                ),
+    return Material(
+      color: AppColors.bgPrimary,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: AppColors.bgPrimary,
+          border: Border(top: BorderSide(color: AppColors.border)),
+        ),
+        padding: EdgeInsets.only(
+          bottom: bottomInset > 0 ? bottomInset : AppSpacing.xs,
+        ),
+        // The button overhangs the top edge, so the stack must not clip it.
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.topCenter,
+          children: [
+            // The tabs are Expanded horizontally, so the Row would otherwise
+            // take all the height the Scaffold offers a bottom bar and squeeze
+            // the body to nothing. IntrinsicHeight sizes it to its content.
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _tab(0),
+                  _tab(1),
+                  // Reserve the gap the centre button sits in.
+                  const SizedBox(width: _fabSize + AppSpacing.sm),
+                  _tab(2),
+                  _tab(3),
+                ],
               ),
             ),
-          ),
-          _tab(2),
-          _tab(3),
-        ],
+            Positioned(
+              top: -_fabSize / 2,
+              child: _AddButton(size: _fabSize, onTap: onAdd),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -254,6 +270,7 @@ class _BottomBar extends StatelessWidget {
     final item = items[index];
     final isActive = currentIndex == index;
     final showBadge = index == 1 && unreadCount > 0;
+    final color = isActive ? AppColors.textPrimary : AppColors.muted;
 
     return Expanded(
       child: Semantics(
@@ -262,9 +279,11 @@ class _BottomBar extends StatelessWidget {
         label: item.label,
         child: InkWell(
           onTap: () => onSelected(index),
-          borderRadius: BorderRadius.circular(AppRadius.md),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.only(
+              top: AppSpacing.sm,
+              bottom: AppSpacing.xs,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -273,10 +292,8 @@ class _BottomBar extends StatelessWidget {
                   children: [
                     Icon(
                       isActive ? item.active : item.inactive,
-                      size: 22,
-                      color: isActive
-                          ? Colors.white
-                          : const Color(0xFF8B8B93),
+                      size: 21,
+                      color: color,
                     ),
                     if (showBadge)
                       Positioned(
@@ -284,12 +301,18 @@ class _BottomBar extends StatelessWidget {
                         top: -3,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 1),
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
                           constraints: const BoxConstraints(minWidth: 15),
                           decoration: BoxDecoration(
                             color: AppColors.primaryAccent,
                             borderRadius: BorderRadius.circular(AppRadius.pill),
-                            border: Border.all(color: AppColors.ink, width: 1.5),
+                            // Ring reads against the white bar behind it.
+                            border: Border.all(
+                              color: AppColors.bgPrimary,
+                              width: 1.5,
+                            ),
                           ),
                           alignment: Alignment.center,
                           child: Text(
@@ -305,18 +328,78 @@ class _BottomBar extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 5),
                 Text(
-                  item.label,
+                  item.label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
                   style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                    color:
-                        isActive ? Colors.white : const Color(0xFF8B8B93),
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    height: 1.1,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // Pink underline marks the current tab.
+                Container(
+                  width: 16,
+                  height: 2.5,
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? AppColors.primaryAccent
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The raised dark circle straddling the top edge of the bar.
+class _AddButton extends StatelessWidget {
+  final double size;
+  final VoidCallback onTap;
+
+  const _AddButton({required this.size, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Add expense or group',
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          // A white ring separates the button from the bar underneath it.
+          border: Border.all(color: AppColors.bgPrimary, width: 4),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.ink.withValues(alpha: 0.18),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: AppColors.ink,
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: const Icon(
+                Icons.add_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
             ),
           ),
         ),
@@ -345,9 +428,15 @@ class _QuickAddSheet extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.xs, AppSpacing.xxs, 0, AppSpacing.sm),
-              child: Text('Add to PaisaSplit',
-                  style: Theme.of(context).textTheme.headlineSmall),
+                AppSpacing.xs,
+                AppSpacing.xxs,
+                0,
+                AppSpacing.sm,
+              ),
+              child: Text(
+                'Add to PaisaSplit',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
             ),
             _option(
               context,
@@ -402,8 +491,11 @@ class _QuickAddSheet extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded,
-              size: 20, color: AppColors.muted),
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 20,
+            color: AppColors.muted,
+          ),
         ],
       ),
     );

@@ -55,8 +55,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   void _updateSelectedMembersForGroup(StateManager state) {
     List<String> memberIds;
     if (_groupId != null) {
-      final grp = state.groups.firstWhere((g) => g.id == _groupId);
-      memberIds = grp.memberIds;
+      final grp = state.groups.where((g) => g.id == _groupId).firstOrNull;
+      // Fall back to everyone we know if the group is not in the local list.
+      memberIds =
+          grp?.memberIds ?? state.members.map((m) => m.id).toList();
     } else {
       memberIds = state.members.map((m) => m.id).toList();
     }
@@ -185,12 +187,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     final groups = state.groups;
     final members = state.members;
 
-    final activeMembers = _groupId != null
+    final selectedGroup =
+        groups.where((g) => g.id == _groupId).firstOrNull;
+    final activeMembers = selectedGroup != null
         ? members
-            .where((m) => groups
-                .firstWhere((g) => g.id == _groupId)
-                .memberIds
-                .contains(m.id))
+            .where((m) => selectedGroup.memberIds.contains(m.id))
             .toList()
         : members;
 
@@ -247,11 +248,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       Expanded(
                         child: _PickerField(
                           label: 'Group',
-                          value: _groupId == null
-                              ? 'No group'
-                              : groups
-                                  .firstWhere((g) => g.id == _groupId)
-                                  .name,
+                          value: selectedGroup?.name ?? 'No group',
                           icon: Icons.groups_outlined,
                           onTap: () => _pickGroup(state),
                         ),

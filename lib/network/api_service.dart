@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -147,19 +148,39 @@ class ApiService {
       return {'success': false, 'message': 'No authentication token'};
     }
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/auth/me'),
-        headers: _getHeaders(),
-      );
+      // Bounded so an unreachable host cannot stall app startup: without this
+      // a dead server hangs on TCP connect for the OS default, far longer
+      // than the splash screen is willing to wait.
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/auth/me'),
+            headers: _getHeaders(),
+          )
+          .timeout(const Duration(seconds: 10));
 
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
         return {'success': true, 'user': UserModel.fromJson(data['user'])};
-      } else {
-        await clearToken(); // Token is invalid/expired
-        return {'success': false, 'message': data['message'] ?? 'Session expired'};
       }
+
+      // Only a 401 means the token itself is bad. Any other status is a server
+      // or gateway problem, and throwing the token away there would sign the
+      // user out permanently over a transient outage.
+      if (response.statusCode == 401) {
+        await clearToken();
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Session expired',
+          'expired': true,
+        };
+      }
+
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not reach the server',
+      };
     } catch (e) {
+      // Offline or unreachable server: keep the token so the session survives.
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
