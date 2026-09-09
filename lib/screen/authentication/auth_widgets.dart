@@ -71,37 +71,26 @@ class AuthBrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: AppColors.primaryAccent,
-            borderRadius: BorderRadius.circular(11),
-          ),
-          alignment: Alignment.center,
-          child: const Text(
-            '₹',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.xs),
-        const Text(
-          'PaisaSplit',
-          style: TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.4,
-            color: AppColors.textPrimary,
-          ),
-        ),
-      ],
+    // The wordmark is a single image so the icon and lettering keep the
+    // proportions and spacing of the supplied brand asset.
+    //
+    // Sized by width, not height: the lockup is roughly 2.4:1, so a height
+    // that matches the old inline mark renders the logo far too small to
+    // read. Capped so it cannot grow absurdly wide on a tablet.
+    final width =
+        (MediaQuery.sizeOf(context).width * 0.55).clamp(200.0, 300.0);
+
+    // Reserve the slot from the asset's own 906x384 ratio so the header does
+    // not jump as the image decodes.
+    return SizedBox(
+      width: width,
+      height: width * 384 / 906,
+      child: Image.asset(
+        'assets/images/paisasplit_wordmark.png',
+        fit: BoxFit.contain,
+        // Announced for screen readers, which cannot read the lettering.
+        semanticLabel: 'PaisaSplit',
+      ),
     );
   }
 }
