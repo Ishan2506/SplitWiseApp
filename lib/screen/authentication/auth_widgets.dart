@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
 
@@ -124,8 +125,7 @@ class AuthDivider extends StatelessWidget {
   }
 }
 
-/// "Continue with Google", with the multi-colour mark drawn in-widget so the
-/// button needs no image asset.
+/// "Continue with Google", using the official multi-colour Google mark.
 class GoogleButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool isLoading;
@@ -173,39 +173,14 @@ class _GoogleGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return SvgPicture.asset(
+      'assets/images/google_logo.svg',
       width: 18,
       height: 18,
-      child: CustomPaint(painter: _GooglePainter()),
+      // Google's branding requires the mark keep its own four colours, so it
+      // is deliberately never tinted to match the button's foreground.
     );
   }
-}
-
-class _GooglePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final paint = Paint()..style = PaintingStyle.fill;
-    const quarter = 1.5707963;
-
-    const colors = [
-      Color(0xFFEA4335),
-      Color(0xFFFBBC05),
-      Color(0xFF34A853),
-      Color(0xFF4285F4),
-    ];
-    for (var i = 0; i < 4; i++) {
-      paint.color = colors[i];
-      canvas.drawArc(rect, -quarter + i * quarter, quarter, true, paint);
-    }
-
-    // Punch out the centre so it reads as a ring rather than a pie.
-    paint.color = AppColors.bgPrimary;
-    canvas.drawCircle(rect.center, size.width * 0.28, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// Prompt shown at the bottom of an auth screen ("New here? Create an account").

@@ -268,8 +268,18 @@ class StateManager extends ChangeNotifier {
     // `clearToken` removes the only persisted session key. A blanket
     // `prefs.clear()` here would also wipe unrelated user settings.
     await ApiService.clearToken();
+
     _currentUserModel = null;
     _isLoggedIn = false;
+    _authErrorMessage = null;
+    // Drop the signed-out user's identity and data so nothing of theirs is
+    // still on screen if someone else signs in on this device.
+    _currentUserId = 'm1';
+    _notifications.clear();
+    _expenses.clear();
+    _payments.clear();
+    _groups.clear();
+
     onSignedOut?.call();
     notifyListeners();
   }

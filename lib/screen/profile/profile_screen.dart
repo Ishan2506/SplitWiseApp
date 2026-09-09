@@ -232,7 +232,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
 
-    if (confirmed == true) state.logout();
+    if (confirmed != true) return;
+
+    await state.logout();
+    if (!context.mounted) return;
+
+    // The profile screen lives inside the dashboard shell, so popping is not
+    // enough — clear the whole stack so the signed-out user cannot navigate
+    // back into the previous session's screens.
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
   }
 }
 
