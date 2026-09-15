@@ -1,10 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Scanning group invite QR codes. -->
+    <!-- Scanning receipts and group invite QR codes. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Talking to the API. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
-    <!-- The QR scanner needs a camera but the app still works without one. -->
+    <!-- The scanners need a camera but the app still works without one:
+         receipts can be uploaded from the gallery and invites pasted as codes. -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
     <application
@@ -61,6 +62,12 @@
                       android:pathPrefix="/join"/>
             </intent-filter>
         </activity>
+        <!-- Have Play Services fetch the OCR model when the app is installed,
+             so the first receipt scan does not stall on a download. -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

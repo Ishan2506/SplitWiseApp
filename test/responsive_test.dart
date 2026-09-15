@@ -17,6 +17,10 @@ import 'package:splitwise_app/screen/authentication/login_screen.dart';
 import 'package:splitwise_app/screen/authentication/signup_screen.dart';
 import 'package:splitwise_app/screen/authentication/forgot_password_screen.dart';
 import 'package:splitwise_app/screen/groups/create_group_screen.dart';
+import 'package:splitwise_app/screen/groups/settle_up_screen.dart';
+import 'package:splitwise_app/screen/groups/who_owes_whom_screen.dart';
+import 'package:splitwise_app/screen/receipt/receipt_review_screen.dart';
+import 'package:splitwise_app/utils/receipt_parser.dart';
 
 /// Widths worth guarding: a small phone, a common phone, a tablet, a desktop.
 const _widths = [
@@ -87,6 +91,18 @@ void main() {
     'signup': () => const SignupScreen(),
     'forgot password': () => const ForgotPasswordScreen(),
     'create group': () => const CreateGroupScreen(),
+    // The receipt flow's review step, given a scan with a mix of confidences —
+    // the badges and the long "low confidence" note are what crowd the rows.
+    'receipt review': () => ReceiptReviewScreen(
+          groupId: 'g-test',
+          imagePath: 'test/does-not-exist.jpg',
+          data: ReceiptParser.parse(
+            'CURRY GRILL\nDate: 12 Aug 2024\nTOTAL 4,800.00',
+          ),
+        ),
+    // Balances are empty here, so both of these render their settled states.
+    'who owes whom': () => const WhoOwesWhomScreen(groupId: 'g-test'),
+    'settle up screen': () => const SettleUpScreen(groupId: 'g-test'),
   };
 
   for (final entry in screens.entries) {

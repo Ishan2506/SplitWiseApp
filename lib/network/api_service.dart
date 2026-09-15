@@ -568,6 +568,67 @@ class ApiService {
     }
   }
 
+  /// POST /groups/:groupId/settlements — record a payment between members.
+  ///
+  /// [from] defaults to the signed-in user on the server, but is sent
+  /// explicitly so the sheet can also log a payment someone else made.
+  static Future<Map<String, dynamic>> createSettlement({
+    required String groupId,
+    required String from,
+    required String to,
+    required double amount,
+    String? note,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/groups/$groupId/settlements'),
+        headers: _getHeaders(),
+        body: jsonEncode({
+          'from': from,
+          'to': to,
+          'amount': amount,
+          if (note != null && note.isNotEmpty) 'note': note,
+        }),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'settlement': data['settlement']};
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not record the payment',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /groups/:groupId/settlements — payments already recorded in a group.
+  static Future<Map<String, dynamic>> getGroupSettlements(
+      String groupId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/groups/$groupId/settlements'),
+        headers: _getHeaders(),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {
+          'success': true,
+          'settlements': (data['settlements'] as List? ?? [])
+              .whereType<Map<String, dynamic>>()
+              .toList(),
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not load payments',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
   /// POST /groups/:id/members — add someone who already has an account.
   static Future<Map<String, dynamic>> addGroupMember({
     required String groupId,

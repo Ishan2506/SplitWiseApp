@@ -47,10 +47,10 @@
 	<true/>
 	<!-- Scanning group invite QR codes. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Splitwise uses the camera to scan group invite QR codes and to take group photos.</string>
+	<string>Splitwise uses the camera to scan receipts, scan group invite QR codes, and take group photos.</string>
 	<!-- Choosing a group photo. -->
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Splitwise needs access to your photos so you can set a group photo.</string>
+	<string>Splitwise needs access to your photos so you can upload a receipt or set a group photo.</string>
 	<!-- splitwise://join/<CODE> — invite links shared from the app. -->
 	<key>CFBundleURLTypes</key>
 	<array>

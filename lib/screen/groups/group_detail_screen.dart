@@ -7,12 +7,15 @@ import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
 import '../../widgets/common_widgets.dart';
+import '../../network/receipt_scanner.dart';
 import '../add_expense_screen.dart';
-import '../settle_up_dialog.dart';
+import '../receipt/receipt_scan_screen.dart';
 import 'create_group_screen.dart';
 import 'group_members_screen.dart';
 import 'group_widgets.dart';
 import 'invite_screen.dart';
+import 'settle_up_screen.dart';
+import 'who_owes_whom_screen.dart';
 
 /// One group: what it is, where everyone stands, and who should pay whom.
 class GroupDetailScreen extends StatefulWidget {
@@ -173,8 +176,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   _YourPosition(
                     balance: userBalance,
                     onSettle: () async {
-                      final recorded = await SettleUpDialog.show(context,
-                          groupId: group.id);
+                      final recorded = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SettleUpScreen(groupId: group.id),
+                        ),
+                      );
                       if (recorded == true && context.mounted) {
                         provider.refreshGroup(group.id);
                       }
@@ -189,6 +196,18 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                       );
                       // Pull the new expense and the balances it moved.
                       if (!context.mounted) return;
+                      provider.refreshGroup(group.id);
+                      context.read<StateManager>().loadGroupExpenses(group.id);
+                    },
+                    onScanReceipt: () async {
+                      final saved = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ReceiptScanScreen(groupId: group.id),
+                        ),
+                      );
+                      if (saved != true || !context.mounted) return;
                       provider.refreshGroup(group.id);
                       context.read<StateManager>().loadGroupExpenses(group.id);
                     },
@@ -220,7 +239,16 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
 
-                  const SectionHeader(title: 'Who pays whom'),
+                  SectionHeader(
+                    title: 'Who pays whom',
+                    actionLabel: 'See all',
+                    onAction: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => WhoOwesWhomScreen(groupId: group.id),
+                      ),
+                    ),
+                  ),
                   _SettlementList(
                     balances: balances,
                     currentUserId: currentUserId,
@@ -283,22 +311,63 @@ class _GroupHeader extends StatelessWidget {
   }
 }
 
-/// Where the signed-in user stands in this group, plus the two main actions.
+/// Square shortcut into the receipt scanner, sized to match the buttons it
+/// sits beside so the action row keeps one baseline.
+class _ScanReceiptButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ScanReceiptButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Scan a receipt',
+      child: Material(
+        color: AppColors.bgPrimary,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.borderStrong),
+            ),
+            child: const Icon(
+              Icons.document_scanner_outlined,
+              size: 20,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Where the signed-in user stands in this group, plus the main actions.
 class _YourPosition extends StatelessWidget {
   final double balance;
   final VoidCallback onSettle;
   final VoidCallback onAddExpense;
+  final VoidCallback onScanReceipt;
 
   const _YourPosition({
     required this.balance,
     required this.onSettle,
     required this.onAddExpense,
+    required this.onScanReceipt,
   });
 
   @override
   Widget build(BuildContext context) {
     final settled = balance.abs() < 0.01;
     final owed = balance > 0;
+    // A negative balance is money the user owes. The 0.01 threshold keeps a
+    // rounding remainder of a paisa from counting as a real debt.
+    final userOwes = !settled && balance < 0;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -366,15 +435,26 @@ class _YourPosition extends StatelessWidget {
                   onPressed: onAddExpense,
                 ),
               ),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: PSButton(
-                  label: 'Settle up',
-                  variant: PSButtonVariant.secondary,
-                  size: PSButtonSize.medium,
-                  onPressed: onSettle,
+              // Settling up is paying someone back, so it only belongs here
+              // when the user actually owes. Being owed money is squared up
+              // by whoever owes it, not from this screen.
+              if (userOwes) ...[
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: PSButton(
+                    label: 'Settle up',
+                    variant: PSButtonVariant.secondary,
+                    size: PSButtonSize.medium,
+                    onPressed: onSettle,
+                  ),
                 ),
-              ),
+              ],
+              // OCR is Android/iOS only, so the entry point is hidden rather
+              // than offered and then refused on web.
+              if (ReceiptScanner.isSupported) ...[
+                const SizedBox(width: AppSpacing.xs),
+                _ScanReceiptButton(onTap: onScanReceipt),
+              ],
             ],
           ),
         ],

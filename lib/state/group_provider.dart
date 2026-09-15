@@ -241,6 +241,32 @@ class GroupProvider extends ChangeNotifier {
     return result;
   }
 
+  /// Records a payment from one member to another and pulls the balances it
+  /// moved.
+  ///
+  /// The refresh is what makes "balances update for everyone immediately"
+  /// true rather than a claim: the server recomputes every position from its
+  /// own expenses and settlements, so we never adjust balances locally.
+  Future<Map<String, dynamic>> recordSettlement({
+    required String groupId,
+    required String fromUserId,
+    required String toUserId,
+    required double amount,
+    String? note,
+  }) async {
+    final result = await ApiService.createSettlement(
+      groupId: groupId,
+      from: fromUserId,
+      to: toUserId,
+      amount: amount,
+      note: note,
+    );
+    if (result['success'] == true) {
+      await loadBalances(groupId);
+    }
+    return result;
+  }
+
   /// Joins a group from a scanned QR code or a tapped invite link.
   Future<Map<String, dynamic>> joinByCode(String code) async {
     final result = await ApiService.joinGroupByCode(code);
