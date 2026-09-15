@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
+import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/currencies.dart';
 import '../../utils/receipt_parser.dart';
 import '../../widgets/common_widgets.dart';
 
@@ -91,6 +93,12 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     return group?.memberIds ?? state.members.map((m) => m.id).toList();
   }
 
+  /// The receipt is entered in the group's currency, which only the
+  /// server-backed group knows about.
+  String get _symbol =>
+      context.read<GroupProvider>().groupById(widget.groupId)?.currencySymbol ??
+      currencySymbolFor(null);
+
   /// Notes that the user has edited a field, which clears its low-confidence
   /// flag — they have looked at it, which is all the flag was asking for.
   void _markCorrected(String field) {
@@ -149,6 +157,8 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
 
     setState(() => _isSaving = true);
     final state = context.read<StateManager>();
+    // Read before awaiting — this touches context, which may be gone after.
+    final symbol = _symbol;
 
     // The merchant name is the most useful label; fall back to the category
     // when the scan could not read one.
@@ -183,7 +193,7 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
       state.pushNotification(
         kind: ActivityKind.expenseAdded,
         title: 'You added "$description"',
-        subtitle: '${formatMoney(_amount)} · from a receipt',
+        subtitle: '${formatMoney(_amount, symbol: symbol)} · from a receipt',
       );
 
       showAppSnack(context, 'Expense saved');
@@ -214,6 +224,11 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<StateManager>();
     final group = state.groups.where((g) => g.id == widget.groupId).firstOrNull;
+    final symbol = context
+            .watch<GroupProvider>()
+            .groupById(widget.groupId)
+            ?.currencySymbol ??
+        currencySymbolFor(null);
     final members = group != null
         ? state.members.where((m) => group.memberIds.contains(m.id)).toList()
         : state.members;
@@ -281,8 +296,8 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
                     ),
-                    decoration: const InputDecoration(
-                      prefixText: '₹',
+                    decoration: InputDecoration(
+                      prefixText: symbol,
                       hintText: '0.00',
                       isDense: true,
                     ),
@@ -355,6 +370,7 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
                   members: members,
                   selected: _splitWith,
                   perHead: perHead,
+                  currencySymbol: symbol,
                   onToggle: (id, value) =>
                       setState(() => _splitWith[id] = value),
                 ),
@@ -699,12 +715,14 @@ class _SplitSummary extends StatelessWidget {
   final List<Member> members;
   final Map<String, bool> selected;
   final double perHead;
+  final String currencySymbol;
   final void Function(String id, bool value) onToggle;
 
   const _SplitSummary({
     required this.members,
     required this.selected,
     required this.perHead,
+    required this.currencySymbol,
     required this.onToggle,
   });
 
@@ -737,7 +755,7 @@ class _SplitSummary extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${formatMoney(perHead, decimals: true)} each',
+                  '${formatMoney(perHead, decimals: true, symbol: currencySymbol)} each',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
@@ -767,7 +785,7 @@ class _SplitSummary extends StatelessWidget {
               ),
               secondary: Text(
                 (selected[member.id] ?? false)
-                    ? formatMoney(perHead, decimals: true)
+                    ? formatMoney(perHead, decimals: true, symbol: currencySymbol)
                     : '—',
                 style: TextStyle(
                   fontSize: 14,

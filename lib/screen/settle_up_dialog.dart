@@ -78,15 +78,17 @@ class _SettleUpDialogState extends State<SettleUpDialog> {
       groupId: _groupId,
     );
 
+    final symbol = state.currencySymbol;
+
     state.addPayment(payment);
     state.pushNotification(
       kind: ActivityKind.settled,
-      title: 'Payment of ${formatMoney(amount)} recorded',
+      title: 'Payment of ${formatMoney(amount, symbol: symbol)} recorded',
       subtitle: 'Balances updated',
     );
 
     Navigator.pop(context, true);
-    showAppSnack(context, 'Recorded ${formatMoney(amount)}');
+    showAppSnack(context, 'Recorded ${formatMoney(amount, symbol: symbol)}');
   }
 
   String _nameFor(List<Member> members, String? id) {
@@ -166,7 +168,7 @@ class _SettleUpDialogState extends State<SettleUpDialog> {
                 placeholder: '0',
                 controller: _amountController,
                 autofocus: true,
-                prefixText: '₹ ',
+                prefixText: '${state.currencySymbol} ',
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [

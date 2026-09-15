@@ -7,6 +7,7 @@ import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/currencies.dart';
 import '../../widgets/common_widgets.dart';
 
 /// Records a payment that clears part or all of a debt.
@@ -129,6 +130,11 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
 
   double get _amount => double.tryParse(_amountController.text.trim()) ?? 0;
 
+  /// The group's own symbol — a payment is always in the group's currency.
+  String get _symbol =>
+      context.read<GroupProvider>().groupById(widget.groupId)?.currencySymbol ??
+      currencySymbolFor(null);
+
   Future<void> _save() async {
     final outstanding = _outstandingBetween();
 
@@ -150,7 +156,7 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
     if (outstanding > 0 && _amount - outstanding > 0.01) {
       showAppSnack(
         context,
-        'That is more than the ${formatMoney(outstanding)} outstanding',
+        'That is more than the ${formatMoney(outstanding, symbol: _symbol)} outstanding',
         success: false,
       );
       return;
@@ -160,6 +166,8 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
 
     final provider = context.read<GroupProvider>();
     final state = context.read<StateManager>();
+    // Read before awaiting — this touches context, which may be gone after.
+    final symbol = _symbol;
 
     final result = await provider.recordSettlement(
       groupId: widget.groupId,
@@ -183,11 +191,11 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
 
     state.pushNotification(
       kind: ActivityKind.settled,
-      title: 'Payment of ${formatMoney(_amount)} recorded',
+      title: 'Payment of ${formatMoney(_amount, symbol: symbol)} recorded',
       subtitle: 'Balances updated for everyone',
     );
 
-    showAppSnack(context, 'Recorded ${formatMoney(_amount)}');
+    showAppSnack(context, 'Recorded ${formatMoney(_amount, symbol: symbol)}');
     Navigator.pop(context, true);
   }
 
@@ -198,6 +206,7 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
 
     final group = provider.groupById(widget.groupId);
     final balances = provider.balancesFor(widget.groupId);
+    final symbol = group?.currencySymbol ?? currencySymbolFor(null);
 
     // Everyone the user could be paying, with what they owe each of them.
     final payable = balances.suggestions
@@ -258,6 +267,7 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
                           _RecipientRow(
                             suggestion: payable[i],
                             selected: payable[i].toId == _toId,
+                            currencySymbol: symbol,
                             onTap: () => setState(() {
                               _toId = payable[i].toId;
                               // A different creditor means a different balance,
@@ -283,6 +293,7 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
                   controller: _amountController,
                   isFullAmount: _isFullAmount,
                   outstanding: outstanding,
+                  currencySymbol: symbol,
                   onFull: () => setState(() {
                     _isFullAmount = true;
                     _seedAmount(outstanding);
@@ -381,11 +392,13 @@ class _RecommendedCard extends StatelessWidget {
 class _RecipientRow extends StatelessWidget {
   final SettlementSuggestion suggestion;
   final bool selected;
+  final String currencySymbol;
   final VoidCallback onTap;
 
   const _RecipientRow({
     required this.suggestion,
     required this.selected,
+    required this.currencySymbol,
     required this.onTap,
   });
 
@@ -420,7 +433,7 @@ class _RecipientRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      'You owe ${formatMoney(suggestion.amount)}',
+                      'You owe ${formatMoney(suggestion.amount, symbol: currencySymbol)}',
                       style: const TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
@@ -450,6 +463,7 @@ class _AmountCard extends StatelessWidget {
   final TextEditingController controller;
   final bool isFullAmount;
   final double outstanding;
+  final String currencySymbol;
   final VoidCallback onFull;
   final VoidCallback onPartial;
 
@@ -457,6 +471,7 @@ class _AmountCard extends StatelessWidget {
     required this.controller,
     required this.isFullAmount,
     required this.outstanding,
+    required this.currencySymbol,
     required this.onFull,
     required this.onPartial,
   });
@@ -487,15 +502,15 @@ class _AmountCard extends StatelessWidget {
               letterSpacing: -1.2,
               color: AppColors.textPrimary,
             ),
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               filled: false,
               border: InputBorder.none,
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
               contentPadding: EdgeInsets.zero,
               isDense: true,
-              prefixText: '₹ ',
-              prefixStyle: TextStyle(
+              prefixText: '$currencySymbol ',
+              prefixStyle: const TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w800,
                 color: AppColors.textSecondary,

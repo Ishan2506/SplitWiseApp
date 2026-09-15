@@ -152,6 +152,7 @@ class GroupProvider extends ChangeNotifier {
     GroupType? type,
     String? photoUrl,
     double? balanceLimit,
+    String? currency,
   }) async {
     final result = await ApiService.updateGroup(
       groupId: groupId,
@@ -160,6 +161,7 @@ class GroupProvider extends ChangeNotifier {
       type: type,
       photoUrl: photoUrl,
       balanceLimit: balanceLimit,
+      currency: currency,
     );
     if (result['success'] == true) {
       _upsert(result['group'] as GroupModel);

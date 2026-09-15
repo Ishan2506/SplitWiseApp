@@ -6,6 +6,7 @@ import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/currencies.dart';
 import '../../widgets/common_widgets.dart';
 import 'settle_up_screen.dart';
 
@@ -29,6 +30,7 @@ class WhoOwesWhomScreen extends StatelessWidget {
     final group = provider.groupById(groupId);
     final balances = provider.balancesFor(groupId);
     final suggestions = balances.suggestions;
+    final symbol = group?.currencySymbol ?? currencySymbolFor(null);
 
     // Split the transfers into the ones the user is part of and the rest.
     final mine = suggestions
@@ -83,6 +85,7 @@ class WhoOwesWhomScreen extends StatelessWidget {
                               child: _YourBalanceCard(
                                 suggestion: s,
                                 currentUserId: currentUserId,
+                                currencySymbol: symbol,
                                 onTap: () => _openSettle(context, s.fromId,
                                     s.toId, s.amount, currentUserId),
                               ),
@@ -102,7 +105,10 @@ class WhoOwesWhomScreen extends StatelessWidget {
                             child: Column(
                               children: [
                                 for (var i = 0; i < others.length; i++) ...[
-                                  _OtherDebtRow(suggestion: others[i]),
+                                  _OtherDebtRow(
+                                    suggestion: others[i],
+                                    currencySymbol: symbol,
+                                  ),
                                   if (i != others.length - 1)
                                     const Padding(
                                       padding: EdgeInsets.only(left: 56),
@@ -176,11 +182,13 @@ class WhoOwesWhomScreen extends StatelessWidget {
 class _YourBalanceCard extends StatelessWidget {
   final SettlementSuggestion suggestion;
   final String currentUserId;
+  final String currencySymbol;
   final VoidCallback onTap;
 
   const _YourBalanceCard({
     required this.suggestion,
     required this.currentUserId,
+    required this.currencySymbol,
     required this.onTap,
   });
 
@@ -237,7 +245,7 @@ class _YourBalanceCard extends StatelessWidget {
                 ),
               ),
               Text(
-                formatMoney(suggestion.amount),
+                formatMoney(suggestion.amount, symbol: currencySymbol),
                 style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
@@ -256,8 +264,12 @@ class _YourBalanceCard extends StatelessWidget {
 /// A debt between two other people — informational, so it stays monochrome.
 class _OtherDebtRow extends StatelessWidget {
   final SettlementSuggestion suggestion;
+  final String currencySymbol;
 
-  const _OtherDebtRow({required this.suggestion});
+  const _OtherDebtRow({
+    required this.suggestion,
+    required this.currencySymbol,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -296,7 +308,7 @@ class _OtherDebtRow extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.xs),
           Text(
-            formatMoney(suggestion.amount),
+            formatMoney(suggestion.amount, symbol: currencySymbol),
             style: const TextStyle(
               fontSize: 14.5,
               fontWeight: FontWeight.w800,

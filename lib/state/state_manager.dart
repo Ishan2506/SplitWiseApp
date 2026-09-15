@@ -4,6 +4,7 @@ import '../models/models.dart';
 import '../model/group_model.dart';
 import '../model/user_model.dart';
 import '../network/api_service.dart';
+import '../utils/currencies.dart';
 
 /// What kind of event a notification describes. Drives its icon and tint.
 enum ActivityKind { expenseAdded, settled, edited, memberJoined, groupCreated }
@@ -73,6 +74,13 @@ class StateManager extends ChangeNotifier {
 
   String? get authErrorMessage => _authErrorMessage;
   UserModel? get currentUserModel => _currentUserModel;
+
+  /// The signed-in user's preferred currency code, and the symbol to prefix
+  /// their personal totals with. Group screens use the group's own symbol
+  /// instead — see `GroupModel.currencySymbol`.
+  String get currencyCode =>
+      _currentUserModel?.preferredCurrency ?? kDefaultCurrencyCode;
+  String get currencySymbol => currencySymbolFor(currencyCode);
 
   /// Restores a stored session. Never completes with an error: the splash
   /// screen awaits this before routing, so a thrown exception here would leave

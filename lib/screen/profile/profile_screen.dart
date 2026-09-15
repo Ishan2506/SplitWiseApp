@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../state/state_manager.dart';
+import 'currency_screen.dart';
 import 'edit_profile_screen.dart';
+import 'help_support_screen.dart';
+import 'privacy_policy_screen.dart';
 import '../../state/group_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/currencies.dart';
 import '../../widgets/common_widgets.dart';
 
 /// Profile and settings.
@@ -31,6 +35,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final state = context.watch<StateManager>();
     final groupCount = context.watch<GroupProvider>().groups.length;
     final user = state.currentUser;
+    final currency =
+        currencyFor(state.currentUserModel?.preferredCurrency);
 
     return Scaffold(
       appBar: AppBar(
@@ -60,18 +66,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _SettingsGroup(
                   children: [
                     _SettingsRow(
-                      icon: Icons.currency_rupee_rounded,
+                      icon: Icons.payments_outlined,
                       label: 'Currency',
-                      trailing: const Text(
-                        'INR',
-                        style: TextStyle(
+                      trailing: Text(
+                        currency.code,
+                        style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textSecondary,
                         ),
                       ),
-                      onTap: () => showAppSnack(
-                          context, 'More currencies are coming soon'),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const CurrencyScreen()),
+                      ),
                     ),
                     _SettingsRow(
                       icon: Icons.notifications_none_rounded,
@@ -120,14 +129,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _SettingsRow(
                       icon: Icons.help_outline_rounded,
                       label: 'Help & support',
-                      onTap: () =>
-                          showAppSnack(context, 'Support is coming soon'),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const HelpSupportScreen()),
+                      ),
                     ),
                     _SettingsRow(
                       icon: Icons.privacy_tip_outlined,
                       label: 'Privacy policy',
-                      onTap: () =>
-                          showAppSnack(context, 'Privacy policy is coming soon'),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const PrivacyPolicyScreen()),
+                      ),
                       isLast: true,
                     ),
                   ],

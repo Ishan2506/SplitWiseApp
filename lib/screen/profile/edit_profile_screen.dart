@@ -24,21 +24,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
 
-  String _currency = 'INR';
   bool _isSaving = false;
   bool _isUploadingPhoto = false;
 
   /// The values we started from, used to send only what changed.
   late final String _initialName;
   late final String _initialPhone;
-  late final String _initialCurrency;
-
-  /// The currencies the picker offers, with the symbol shown on each chip.
-  static const _currencies = <String, String>{
-    'INR': '₹',
-    'USD': '\$',
-    'EUR': '€',
-  };
 
   @override
   void initState() {
@@ -47,12 +38,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     _initialName = user?.name ?? '';
     _initialPhone = user?.mobileNumber ?? '';
-    _initialCurrency = user?.preferredCurrency ?? 'INR';
 
     _nameController = TextEditingController(text: _initialName);
     _phoneController = TextEditingController(text: _initialPhone);
-    _currency =
-        _currencies.containsKey(_initialCurrency) ? _initialCurrency : 'INR';
   }
 
   @override
@@ -64,8 +52,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   bool get _hasChanges =>
       _nameController.text.trim() != _initialName ||
-      _phoneController.text.trim() != _initialPhone ||
-      _currency != _initialCurrency;
+      _phoneController.text.trim() != _initialPhone;
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -88,7 +75,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // duplicate mobile even when it is the user's own). A cleared field
       // still sends '', which is what removes the number.
       mobileNumber: phone != _initialPhone ? phone : null,
-      preferredCurrency: _currency != _initialCurrency ? _currency : null,
     );
 
     if (!mounted) return;
@@ -296,14 +282,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   const SizedBox(height: AppSpacing.md),
 
-                  const _FieldLabel('Default currency'),
-                  const SizedBox(height: AppSpacing.xs),
-                  _CurrencyPicker(
-                    currencies: _currencies,
-                    selected: _currency,
-                    onSelected: (c) => setState(() => _currency = c),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
+                  const SizedBox(height: AppSpacing.md),
 
                   PSButton(
                     label: 'Save changes',
@@ -390,81 +369,6 @@ class _AvatarPicker extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Small caps label above a field.
-class _FieldLabel extends StatelessWidget {
-  final String text;
-  const _FieldLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-        color: AppColors.textSecondary,
-      ),
-    );
-  }
-}
-
-/// Segmented currency chips.
-class _CurrencyPicker extends StatelessWidget {
-  final Map<String, String> currencies;
-  final String selected;
-  final ValueChanged<String> onSelected;
-
-  const _CurrencyPicker({
-    required this.currencies,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        for (final entry in currencies.entries) ...[
-          Expanded(
-            child: _chip(code: entry.key, symbol: entry.value),
-          ),
-          if (entry.key != currencies.keys.last)
-            const SizedBox(width: AppSpacing.xs),
-        ],
-      ],
-    );
-  }
-
-  Widget _chip({required String code, required String symbol}) {
-    final isSelected = code == selected;
-    return GestureDetector(
-      onTap: () => onSelected(code),
-      child: AnimatedContainer(
-        duration: AppDuration.fast,
-        height: 52,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.textPrimary : AppColors.inputBg,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(
-            color: isSelected ? AppColors.textPrimary : AppColors.border,
-          ),
-        ),
-        child: Text(
-          '$symbol $code',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: isSelected ? AppColors.bgPrimary : AppColors.textPrimary,
           ),
         ),
       ),

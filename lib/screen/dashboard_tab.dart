@@ -194,6 +194,9 @@ class _BalanceSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final settled = net.abs() < 0.01;
     final positive = net > 0;
+    // These totals span groups that may each use a different currency, so
+    // there is no single right symbol — the user's own is the honest choice.
+    final symbol = context.watch<StateManager>().currencySymbol;
 
     return Column(
       children: [
@@ -214,7 +217,9 @@ class _BalanceSummary extends StatelessWidget {
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  settled ? formatMoney(0) : formatMoney(net.abs()),
+                  settled
+                      ? formatMoney(0, symbol: symbol)
+                      : formatMoney(net.abs(), symbol: symbol),
                   style: const TextStyle(
                     fontSize: 40,
                     fontWeight: FontWeight.w800,
@@ -267,7 +272,7 @@ class _BalanceSummary extends StatelessWidget {
             Expanded(
               child: StatTile(
                 label: 'You owe',
-                value: formatMoney(owe),
+                value: formatMoney(owe, symbol: symbol),
                 valueColor: AppColors.negative,
                 background: AppColors.negativeLight,
                 borderColor: AppColors.negativeBorder,
@@ -278,7 +283,7 @@ class _BalanceSummary extends StatelessWidget {
             Expanded(
               child: StatTile(
                 label: "You're owed",
-                value: formatMoney(owed),
+                value: formatMoney(owed, symbol: symbol),
                 valueColor: AppColors.success,
                 background: AppColors.successLight,
                 borderColor: AppColors.successBorder,
@@ -358,7 +363,7 @@ class _GroupTile extends StatelessWidget {
           '${group.type.label} · ${group.members.length} member${group.members.length == 1 ? '' : 's'}',
       icon: group.type.icon,
       iconColor: group.type.color,
-      amount: formatMoney(balance.abs()),
+      amount: formatMoney(balance.abs(), symbol: group.currencySymbol),
       amountLabel: owed ? "You're owed" : 'You owe',
       amountColor: owed ? AppColors.success : AppColors.negative,
       isSettled: settled,

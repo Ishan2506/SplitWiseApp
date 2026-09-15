@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/currencies.dart';
+
 /// The kinds of group the app offers. The wire values match the backend's
 /// `GROUP_TYPES` enum exactly — keep the two in step.
 enum GroupType { family, friends, couple, trip, office, other }
@@ -267,21 +269,9 @@ class GroupModel {
 
   bool get hasBalanceLimit => balanceLimit > 0;
 
-  /// The currency symbol used throughout the group's screens.
-  String get currencySymbol {
-    switch (currency.toUpperCase()) {
-      case 'INR':
-        return '₹';
-      case 'USD':
-        return '\$';
-      case 'EUR':
-        return '€';
-      case 'GBP':
-        return '£';
-      default:
-        return '$currency ';
-    }
-  }
+  /// The currency symbol used throughout the group's screens. Resolved from
+  /// the shared catalogue so this and the currency picker never disagree.
+  String get currencySymbol => currencySymbolFor(currency);
 }
 
 /// One member's standing in a group, including how much of the group's

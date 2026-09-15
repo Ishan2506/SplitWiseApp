@@ -7,10 +7,16 @@ import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/currencies.dart';
 import '../../widgets/common_widgets.dart';
 import 'invite_screen.dart';
 
 /// Create a group: name it, say what kind it is, and pick who is in it.
+///
+/// With [existingGroupId] the same screen edits that group instead: the name,
+/// kind and currency are pre-filled and saving PATCHes the group rather than
+/// creating another one. Membership is not edited here — that lives on the
+/// members screen, where balances are visible before anyone is removed.
 class CreateGroupScreen extends StatefulWidget {
   final String? existingGroupId;
   const CreateGroupScreen({super.key, this.existingGroupId});
@@ -25,6 +31,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final _searchController = TextEditingController();
 
   GroupType _selectedType = GroupType.trip;
+  String _currency = kDefaultCurrencyCode;
 
   bool _isLoading = false;
   bool _isLoadingUsers = true;
@@ -32,10 +39,31 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final Map<String, bool> _selectedMembers = {};
   List<Member> _availableUsers = [];
 
+  bool get _isEditing => widget.existingGroupId != null;
+
   @override
   void initState() {
     super.initState();
-    _loadAvailableUsers();
+    if (_isEditing) {
+      _prefillFromGroup();
+    } else {
+      // A new group starts in the creator's own currency.
+      _currency =
+          Provider.of<StateManager>(context, listen: false).currencyCode;
+      _loadAvailableUsers();
+    }
+  }
+
+  /// Seeds the form from the group being edited. It is already in the
+  /// provider — the only way to reach this screen is from the group itself.
+  void _prefillFromGroup() {
+    final group = Provider.of<GroupProvider>(context, listen: false)
+        .groupById(widget.existingGroupId!);
+    if (group == null) return;
+
+    _groupNameController.text = group.name;
+    _selectedType = group.type;
+    _currency = group.currency;
   }
 
   Future<void> _loadAvailableUsers() async {
@@ -75,8 +103,9 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         .toList();
   }
 
-  Future<void> _createGroup() async {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_isEditing) return _saveEdits();
 
     setState(() => _isLoading = true);
 
@@ -91,6 +120,9 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         name: groupName,
         description: _selectedType.label,
         type: _selectedType,
+        // Sent explicitly rather than left to the server's fallback, so the
+        // choice is visible here.
+        currency: _currency,
         memberIds: memberIds,
       );
 
@@ -120,6 +152,33 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     }
   }
 
+  /// Saves changes to an existing group and returns to it.
+  Future<void> _saveEdits() async {
+    setState(() => _isLoading = true);
+
+    final provider = Provider.of<GroupProvider>(context, listen: false);
+    final result = await provider.updateGroup(
+      groupId: widget.existingGroupId!,
+      name: _groupNameController.text.trim(),
+      type: _selectedType,
+      currency: _currency,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      showAppSnack(context, 'Group updated');
+      Navigator.pop(context);
+    } else {
+      showAppSnack(
+        context,
+        (result['message'] ?? 'Could not update the group').toString(),
+        success: false,
+      );
+    }
+  }
+
   @override
   void dispose() {
     _groupNameController.dispose();
@@ -130,7 +189,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('New group')),
+      appBar: AppBar(title: Text(_isEditing ? 'Edit group' : 'New group')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -164,36 +223,62 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
 
-                  SectionHeader(
-                    title: 'Add people',
-                    subtitle: _selectedCount == 0
-                        ? 'You can also invite them later with a link'
-                        : '$_selectedCount selected',
+                  Text(
+                    'Currency',
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
-                  PSSearchField(
-                    hint: 'Search by name or email',
-                    controller: _searchController,
-                    onChanged: (v) => setState(() => _search = v),
+                  const SizedBox(height: AppSpacing.xxs),
+                  Text(
+                    _isEditing
+                        ? 'Changes the symbol shown on this group. Amounts '
+                            'already recorded are not converted.'
+                        : 'Every amount in this group is recorded in this '
+                            'currency.',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  _MemberPicker(
-                    isLoading: _isLoadingUsers,
-                    users: _visibleUsers,
-                    hasAnyUsers: _availableUsers.isNotEmpty,
-                    selected: _selectedMembers,
-                    onToggle: (id, v) =>
-                        setState(() => _selectedMembers[id] = v),
+                  _CurrencyDropdown(
+                    selected: _currency,
+                    onChanged: (c) => setState(() => _currency = c),
                   ),
-
                   const SizedBox(height: AppSpacing.xl),
+
+                  // Membership is edited on the members screen, where each
+                  // person's balance is visible before they are removed.
+                  if (!_isEditing) ...[
+                    SectionHeader(
+                      title: 'Add people',
+                      subtitle: _selectedCount == 0
+                          ? 'You can also invite them later with a link'
+                          : '$_selectedCount selected',
+                    ),
+                    PSSearchField(
+                      hint: 'Search by name or email',
+                      controller: _searchController,
+                      onChanged: (v) => setState(() => _search = v),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _MemberPicker(
+                      isLoading: _isLoadingUsers,
+                      users: _visibleUsers,
+                      hasAnyUsers: _availableUsers.isNotEmpty,
+                      selected: _selectedMembers,
+                      onToggle: (id, v) =>
+                          setState(() => _selectedMembers[id] = v),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                  ],
+
                   PSButton(
-                    label: 'Create group',
-                    onPressed: _isLoading ? null : _createGroup,
+                    label: _isEditing ? 'Save changes' : 'Create group',
+                    onPressed: _isLoading ? null : _save,
                     isLoading: _isLoading,
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'You can invite more people once the group exists.',
+                    _isEditing
+                        ? 'Add or remove people from the members screen.'
+                        : 'You can invite more people once the group exists.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -208,6 +293,60 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
 }
 
 /// Group types as a wrapping set of cards rather than a plain dropdown.
+/// Picks the group's currency from the shared catalogue.
+class _CurrencyDropdown extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  const _CurrencyDropdown({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    // A group may carry a code the catalogue does not list — keep showing it
+    // rather than silently snapping the group to another currency.
+    final known = kCurrencies.any((c) => c.code == selected);
+
+    return DropdownButtonFormField<String>(
+      initialValue: known ? selected : null,
+      hint: known ? null : Text(selected),
+      isExpanded: true,
+      icon: const Icon(Icons.expand_more_rounded, color: AppColors.muted),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: AppColors.inputBg,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+      ),
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+      ),
+      items: [
+        for (final c in kCurrencies)
+          DropdownMenuItem<String>(
+            value: c.code,
+            child: Text('${c.symbol}  ${c.code} · ${c.name}',
+                overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      onChanged: (v) {
+        if (v != null) onChanged(v);
+      },
+    );
+  }
+}
+
 class _TypeGrid extends StatelessWidget {
   final GroupType selected;
   final ValueChanged<GroupType> onSelected;

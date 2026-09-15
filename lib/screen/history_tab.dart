@@ -67,7 +67,7 @@ class _HistoryTabState extends State<HistoryTab> {
                       ? 'Nothing to show'
                       : '${filtered.length} expense'
                           '${filtered.length == 1 ? '' : 's'} · '
-                          '${formatMoney(total)} total',
+                          '${formatMoney(total, symbol: state.currencySymbol)} total',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -169,6 +169,9 @@ class _ExpenseRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final share = expense.splits[userId] ?? 0;
     final paidByMe = expense.paidById == userId;
+    // History spans every group, so it uses the user's own symbol rather than
+    // any one group's.
+    final symbol = context.watch<StateManager>().currencySymbol;
 
     // If you paid, you are owed everyone else's share; otherwise you owe yours.
     final youLabel = paidByMe ? 'you lent' : 'your share';
@@ -180,12 +183,12 @@ class _ExpenseRow extends StatelessWidget {
         ?groupName,
         '${paidByMe ? 'You' : payerName} paid',
       ].join(' · '),
-      amount: formatMoney(expense.amount),
+      amount: formatMoney(expense.amount, symbol: symbol),
       day: expense.date.day.toString().padLeft(2, '0'),
       month: _months[expense.date.month - 1],
       trailingLabel: youAmount.abs() < 0.01
           ? 'not involved'
-          : '$youLabel ${formatMoney(youAmount)}',
+          : '$youLabel ${formatMoney(youAmount, symbol: symbol)}',
     );
   }
 }

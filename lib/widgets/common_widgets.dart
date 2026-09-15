@@ -8,7 +8,17 @@ import '../utils/app_constants.dart';
 // ---------------------------------------------------------------------------
 
 /// Formats amounts as ₹1,23,456 using the Indian grouping convention.
-String formatMoney(num amount, {bool withSymbol = true, bool decimals = false}) {
+///
+/// [symbol] overrides the prefix — pass a group's `currencySymbol` for amounts
+/// that belong to a group, or the signed-in user's symbol for personal totals.
+/// Nothing is converted: only the prefix changes, so the number shown is always
+/// the number stored.
+String formatMoney(
+  num amount, {
+  bool withSymbol = true,
+  bool decimals = false,
+  String symbol = '₹',
+}) {
   final negative = amount < 0;
   final value = amount.abs();
   final fixed = decimals ? value.toStringAsFixed(2) : value.round().toString();
@@ -31,7 +41,7 @@ String formatMoney(num amount, {bool withSymbol = true, bool decimals = false}) 
   }
 
   final decimalPart = parts.length > 1 ? '.${parts[1]}' : '';
-  return '${negative ? '-' : ''}${withSymbol ? '₹' : ''}$grouped$decimalPart';
+  return '${negative ? '-' : ''}${withSymbol ? symbol : ''}$grouped$decimalPart';
 }
 
 /// Two-letter initials for an avatar.

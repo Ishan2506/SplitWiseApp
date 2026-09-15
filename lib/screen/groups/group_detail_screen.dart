@@ -175,6 +175,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   const SizedBox(height: AppSpacing.md),
                   _YourPosition(
                     balance: userBalance,
+                    currencySymbol: group.currencySymbol,
                     onSettle: () async {
                       final recorded = await Navigator.push<bool>(
                         context,
@@ -252,6 +253,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   _SettlementList(
                     balances: balances,
                     currentUserId: currentUserId,
+                    currencySymbol: group.currencySymbol,
                   ),
                 ],
               ),
@@ -350,12 +352,14 @@ class _ScanReceiptButton extends StatelessWidget {
 /// Where the signed-in user stands in this group, plus the main actions.
 class _YourPosition extends StatelessWidget {
   final double balance;
+  final String currencySymbol;
   final VoidCallback onSettle;
   final VoidCallback onAddExpense;
   final VoidCallback onScanReceipt;
 
   const _YourPosition({
     required this.balance,
+    required this.currencySymbol,
     required this.onSettle,
     required this.onAddExpense,
     required this.onScanReceipt,
@@ -406,7 +410,7 @@ class _YourPosition extends StatelessWidget {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
-              formatMoney(balance.abs()),
+              formatMoney(balance.abs(), symbol: currencySymbol),
               style: TextStyle(
                 fontSize: 34,
                 fontWeight: FontWeight.w800,
@@ -497,7 +501,7 @@ class _LimitCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium),
               ),
               Text(
-                '${formatMoney(group.balanceLimit)} per member',
+                '${formatMoney(group.balanceLimit, symbol: group.currencySymbol)} per member',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -594,7 +598,10 @@ class _MemberBalanceList extends StatelessWidget {
                     : balance > 0
                         ? 'gets back'
                         : 'owes',
-                amount: settled ? '—' : formatMoney(balance.abs()),
+                amount: settled
+                    ? '—'
+                    : formatMoney(balance.abs(),
+                        symbol: group.currencySymbol),
                 amountColor: settled
                     ? AppColors.muted
                     : balance > 0
@@ -618,10 +625,12 @@ class _MemberBalanceList extends StatelessWidget {
 class _SettlementList extends StatelessWidget {
   final GroupBalances balances;
   final String currentUserId;
+  final String currencySymbol;
 
   const _SettlementList({
     required this.balances,
     required this.currentUserId,
+    required this.currencySymbol,
   });
 
   @override
@@ -655,7 +664,11 @@ class _SettlementList extends StatelessWidget {
     return Column(
       children: [
         for (final s in suggestions) ...[
-          _SettlementRow(suggestion: s, currentUserId: currentUserId),
+          _SettlementRow(
+            suggestion: s,
+            currentUserId: currentUserId,
+            currencySymbol: currencySymbol,
+          ),
           const SizedBox(height: AppSpacing.xs),
         ],
       ],
@@ -666,10 +679,12 @@ class _SettlementList extends StatelessWidget {
 class _SettlementRow extends StatelessWidget {
   final SettlementSuggestion suggestion;
   final String currentUserId;
+  final String currencySymbol;
 
   const _SettlementRow({
     required this.suggestion,
     required this.currentUserId,
+    required this.currencySymbol,
   });
 
   @override
@@ -720,7 +735,8 @@ class _SettlementRow extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.xxs),
           Text(
-            formatMoney(suggestion.amount, decimals: true),
+            formatMoney(suggestion.amount,
+                decimals: true, symbol: currencySymbol),
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w800,

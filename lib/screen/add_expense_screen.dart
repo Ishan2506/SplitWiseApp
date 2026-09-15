@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
+import '../state/group_provider.dart';
 import '../state/state_manager.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_constants.dart';
+import '../utils/currencies.dart';
 import '../widgets/common_widgets.dart';
 
 /// Add an expense: what it was, how much, who paid, and how it splits.
@@ -100,6 +102,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     _paidById = state.currentUserId;
     _updateSelectedMembersForGroup(state);
   }
+
+  /// An expense is always in its group's currency. The server-backed group
+  /// carries that, so it is read from GroupProvider rather than the lighter
+  /// in-memory group held by StateManager.
+  String get _symbol =>
+      context.read<GroupProvider>().groupById(widget.groupId)?.currencySymbol ??
+      currencySymbolFor(null);
 
   void _updateSelectedMembersForGroup(StateManager state) {
     final grp = state.groups.where((g) => g.id == widget.groupId).firstOrNull;
@@ -218,7 +227,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           _splitType == SplitType.percentage
               ? 'Percentages must add up to 100% (currently '
                   '${_assigned.toStringAsFixed(2)}%)'
-              : 'Split amounts must add up to ${formatMoney(_amount)}',
+              : 'Split amounts must add up to ${formatMoney(_amount, symbol: _symbol)}',
           success: false,
         );
         return;
@@ -229,6 +238,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
     final state = Provider.of<StateManager>(context, listen: false);
     final amount = double.parse(_amountController.text.trim());
+    // Read before awaiting — this touches context, which may be gone after.
+    final symbol = _symbol;
 
     // The category doubles as the expense's label.
     final description = _selectedCategory;
@@ -266,7 +277,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         kind: ActivityKind.expenseAdded,
         title: 'You added "$description"',
         subtitle:
-            '${formatMoney(amount)} · split ${selectedSplitMembers.length} ways',
+            '${formatMoney(amount, symbol: symbol)} · split ${selectedSplitMembers.length} ways',
       );
 
       showAppSnack(context, 'Expense saved');
@@ -404,6 +415,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
     final group =
         state.groups.where((g) => g.id == widget.groupId).firstOrNull;
+    // The expense is entered in the group's currency, which only the
+    // server-backed group knows about.
+    final symbol = context
+            .watch<GroupProvider>()
+            .groupById(widget.groupId)
+            ?.currencySymbol ??
+        currencySymbolFor(null);
     // Before the group loads we do not know its roster, so fall back to
     // everyone rather than showing an empty split list.
     final activeMembers = group != null
@@ -450,6 +468,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   const SizedBox(height: AppSpacing.xs),
                   _AmountField(
                     controller: _amountController,
+                    currencySymbol: symbol,
                     onChanged: (_) => setState(_seedCustomFields),
                   ),
                   const SizedBox(height: AppSpacing.lg),
@@ -500,6 +519,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     controllers: _customAmountControllers,
                     splitType: _splitType,
                     total: _amount,
+                    currencySymbol: symbol,
                     onToggle: _onMemberToggled,
                     onAmountChanged: _onCustomAmountChanged,
                   ),
@@ -510,6 +530,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       remainder: _remainder,
                       total: _amount,
                       isPercentage: _splitType == SplitType.percentage,
+                      currencySymbol: symbol,
                       onReset: _resetCustomFields,
                     ),
                   ],
@@ -577,9 +598,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 /// Big, centred amount entry — the first thing you fill in.
 class _AmountField extends StatelessWidget {
   final TextEditingController controller;
+  final String currencySymbol;
   final ValueChanged<String> onChanged;
 
-  const _AmountField({required this.controller, required this.onChanged});
+  const _AmountField({
+    required this.controller,
+    required this.currencySymbol,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -612,7 +638,7 @@ class _AmountField extends StatelessWidget {
                 letterSpacing: -1.6,
                 color: AppColors.textPrimary,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 filled: false,
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
@@ -621,8 +647,8 @@ class _AmountField extends StatelessWidget {
                 focusedErrorBorder: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
                 isDense: true,
-                prefixText: '₹',
-                prefixStyle: TextStyle(
+                prefixText: currencySymbol,
+                prefixStyle: const TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w800,
                   color: AppColors.muted,
@@ -921,6 +947,7 @@ class _SplitList extends StatelessWidget {
   final Map<String, TextEditingController> controllers;
   final SplitType splitType;
   final double total;
+  final String currencySymbol;
   final void Function(String id, bool value) onToggle;
   final VoidCallback onAmountChanged;
 
@@ -930,6 +957,7 @@ class _SplitList extends StatelessWidget {
     required this.controllers,
     required this.splitType,
     required this.total,
+    required this.currencySymbol,
     required this.onToggle,
     required this.onAmountChanged,
   });
@@ -1016,7 +1044,7 @@ class _SplitList extends StatelessWidget {
                 )
               else if (splitType == SplitType.equal)
                 Text(
-                  formatMoney(perHead, decimals: true),
+                  formatMoney(perHead, decimals: true, symbol: currencySymbol),
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
@@ -1025,12 +1053,13 @@ class _SplitList extends StatelessWidget {
                 )
               else ...[
                 // For a percentage split, show what the percent works out to
-                // in rupees so the figure is never a guess.
+                // as an amount so the figure is never a guess.
                 if (splitType == SplitType.percentage)
                   Padding(
                     padding: const EdgeInsets.only(right: AppSpacing.xs),
                     child: Text(
-                      formatMoney(_percentShare(member.id), decimals: true),
+                      formatMoney(_percentShare(member.id),
+                          decimals: true, symbol: currencySymbol),
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -1056,8 +1085,9 @@ class _SplitList extends StatelessWidget {
                       color: AppColors.textPrimary,
                     ),
                     decoration: InputDecoration(
-                      prefixText:
-                          splitType == SplitType.percentage ? null : '₹',
+                      prefixText: splitType == SplitType.percentage
+                          ? null
+                          : currencySymbol,
                       suffixText:
                           splitType == SplitType.percentage ? '%' : null,
                       isDense: true,
@@ -1080,19 +1110,21 @@ class _RemainderBar extends StatelessWidget {
   final double remainder;
   final double total;
   final bool isPercentage;
+  final String currencySymbol;
   final VoidCallback onReset;
 
   const _RemainderBar({
     required this.remainder,
     required this.total,
     required this.isPercentage,
+    required this.currencySymbol,
     required this.onReset,
   });
 
   /// Formats a leftover/overshoot in the unit the current split uses.
   String _unit(double value) => isPercentage
       ? '${value.toStringAsFixed(2)}%'
-      : formatMoney(value, decimals: true);
+      : formatMoney(value, decimals: true, symbol: currencySymbol);
 
   @override
   Widget build(BuildContext context) {
@@ -1124,7 +1156,7 @@ class _RemainderBar extends StatelessWidget {
               balanced
                   ? (isPercentage
                       ? 'Percentages add up to 100%'
-                      : 'Splits add up to ${formatMoney(total)}')
+                      : 'Splits add up to ${formatMoney(total, symbol: currencySymbol)}')
                   : over
                       ? '${_unit(remainder.abs())} over'
                       : '${_unit(remainder)} left to assign',
