@@ -467,13 +467,30 @@ class _PSTextFieldState extends State<PSTextField> {
               color: AppColors.muted,
             ),
             counterText: '',
-            prefixText: widget.prefixText,
-            prefixStyle: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-            prefixIcon: widget.prefixIcon,
+            // Flutter hides `prefixText` while the field is empty and
+            // unfocused, so a fixed prefix like '+91' would only appear once
+            // the user tapped in. Rendering it as a prefixIcon instead keeps
+            // it on screen at all times.
+            prefixIcon: widget.prefixIcon ??
+                (widget.prefixText == null
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(
+                            left: AppSpacing.sm, right: AppSpacing.xxs),
+                        child: Text(
+                          widget.prefixText!,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      )),
+            // Keeps the prefix snug against the text instead of padded out to
+            // the default icon width.
+            prefixIconConstraints: widget.prefixIcon == null
+                ? const BoxConstraints(minWidth: 0, minHeight: 0)
+                : null,
             suffixIcon: widget.suffixIcon ??
                 (widget.obscureText
                     ? IconButton(

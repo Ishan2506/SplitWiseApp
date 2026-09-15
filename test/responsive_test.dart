@@ -11,6 +11,7 @@ import 'package:splitwise_app/screen/history_tab.dart';
 import 'package:splitwise_app/screen/activity_tab.dart';
 import 'package:splitwise_app/screen/add_expense_screen.dart';
 import 'package:splitwise_app/screen/profile/profile_screen.dart';
+import 'package:splitwise_app/screen/profile/edit_profile_screen.dart';
 import 'package:splitwise_app/screen/settle_up_dialog.dart';
 import 'package:splitwise_app/screen/authentication/login_screen.dart';
 import 'package:splitwise_app/screen/authentication/signup_screen.dart';
@@ -76,8 +77,11 @@ void main() {
     'dashboard': () => const Scaffold(body: DashboardTab()),
     'history': () => const Scaffold(body: HistoryTab()),
     'activity': () => const Scaffold(body: ActivityTab()),
-    'add expense': () => const AddExpenseScreen(),
+    // No groups are seeded, so this renders the not-yet-loaded fallback:
+    // an unknown group id still has to lay out without overflowing.
+    'add expense': () => const AddExpenseScreen(groupId: 'g-test'),
     'profile': () => const ProfileScreen(),
+    'edit profile': () => const EditProfileScreen(),
     'settle up': () => const Scaffold(body: SettleUpDialog()),
     'login': () => const LoginScreen(),
     'signup': () => const SignupScreen(),

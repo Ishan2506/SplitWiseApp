@@ -100,11 +100,7 @@ class _HistoryTabState extends State<HistoryTab> {
                     subtitle:
                         'Add your first expense and it will show up here.',
                     buttonLabel: 'Add expense',
-                    onButtonPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const AddExpenseScreen()),
-                    ),
+                    onButtonPressed: () => openAddExpense(context),
                   )
                 : const EmptyStateWidget(
                     iconData: Icons.search_off_rounded,

@@ -55,10 +55,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     switch (choice) {
       case 'expense':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const AddExpenseScreen()),
-        );
+        openAddExpense(context);
       case 'group':
         Navigator.push(
           context,

@@ -11,9 +11,53 @@ import '../widgets/common_widgets.dart';
 ///
 /// The split section always shows the resulting per-person figures so the
 /// numbers are visible before saving rather than only afterwards.
+/// Opens Add Expense for a group chosen by the user.
+///
+/// Expenses always belong to a group, so entry points that have no group in
+/// hand (the dashboard's quick-add, the History empty state) ask which one
+/// first instead of offering a group field inside the form.
+///
+/// Does nothing if the user has no groups yet — there is nothing to add to.
+Future<void> openAddExpense(BuildContext context) async {
+  final state = context.read<StateManager>();
+  final groups = state.groups;
+
+  if (groups.isEmpty) {
+    showAppSnack(
+      context,
+      'Create a group first — expenses are added to a group',
+      success: false,
+    );
+    return;
+  }
+
+  String? groupId = groups.first.id;
+  if (groups.length > 1) {
+    groupId = await showModalBottomSheet<String?>(
+      context: context,
+      builder: (sheetContext) => _OptionSheet(
+        title: 'Add expense to',
+        options: [
+          for (final g in groups)
+            _Option(id: g.id, label: g.name, icon: Icons.groups_rounded),
+        ],
+        selectedId: '',
+      ),
+    );
+  }
+
+  if (groupId == null || groupId.isEmpty || !context.mounted) return;
+  await Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => AddExpenseScreen(groupId: groupId!)),
+  );
+}
+
 class AddExpenseScreen extends StatefulWidget {
-  final String? preselectedGroupId;
-  const AddExpenseScreen({super.key, this.preselectedGroupId});
+  /// The group the expense belongs to. Expenses are always recorded against a
+  /// group, so this is required rather than chosen inside the form.
+  final String groupId;
+  const AddExpenseScreen({super.key, required this.groupId});
 
   @override
   State<AddExpenseScreen> createState() => _AddExpenseScreenState();
@@ -21,11 +65,9 @@ class AddExpenseScreen extends StatefulWidget {
 
 class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _descriptionController = TextEditingController();
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
 
-  String? _groupId;
   String? _paidById;
   String _selectedCategory = 'Food & drink';
   DateTime _selectedDate = DateTime.now();
@@ -54,22 +96,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   void initState() {
     super.initState();
-    _groupId = widget.preselectedGroupId;
     final state = Provider.of<StateManager>(context, listen: false);
     _paidById = state.currentUserId;
     _updateSelectedMembersForGroup(state);
   }
 
   void _updateSelectedMembersForGroup(StateManager state) {
-    List<String> memberIds;
-    if (_groupId != null) {
-      final grp = state.groups.where((g) => g.id == _groupId).firstOrNull;
-      // Fall back to everyone we know if the group is not in the local list.
-      memberIds =
-          grp?.memberIds ?? state.members.map((m) => m.id).toList();
-    } else {
-      memberIds = state.members.map((m) => m.id).toList();
-    }
+    final grp = state.groups.where((g) => g.id == widget.groupId).firstOrNull;
+    // Fall back to everyone we know if the group has not loaded yet.
+    final memberIds = grp?.memberIds ?? state.members.map((m) => m.id).toList();
 
     _splitMembersSelected.clear();
     for (final controller in _customAmountControllers.values) {
@@ -195,7 +230,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     final state = Provider.of<StateManager>(context, listen: false);
     final amount = double.parse(_amountController.text.trim());
 
-    final description = _descriptionController.text.trim();
+    // The category doubles as the expense's label.
+    final description = _selectedCategory;
 
     try {
       final result = await state.saveExpense(
@@ -210,7 +246,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         values: _splitType == SplitType.equal
             ? null
             : _customValues(selectedSplitMembers),
-        groupId: _groupId,
+        groupId: widget.groupId,
         date: _selectedDate,
         notes: _notesController.text.trim(),
       );
@@ -343,7 +379,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   @override
   void dispose() {
-    _descriptionController.dispose();
     _amountController.dispose();
     _notesController.dispose();
     for (final controller in _customAmountControllers.values) {
@@ -365,20 +400,36 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<StateManager>();
-    final groups = state.groups;
     final members = state.members;
 
-    final selectedGroup =
-        groups.where((g) => g.id == _groupId).firstOrNull;
-    final activeMembers = selectedGroup != null
-        ? members
-            .where((m) => selectedGroup.memberIds.contains(m.id))
-            .toList()
+    final group =
+        state.groups.where((g) => g.id == widget.groupId).firstOrNull;
+    // Before the group loads we do not know its roster, so fall back to
+    // everyone rather than showing an empty split list.
+    final activeMembers = group != null
+        ? members.where((m) => group.memberIds.contains(m.id)).toList()
         : members;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add expense'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Add expense'),
+            if (group != null)
+              Text(
+                group.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _saveExpense,
@@ -403,17 +454,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   ),
                   const SizedBox(height: AppSpacing.lg),
 
-                  PSTextField(
-                    label: 'What was it for?',
-                    placeholder: 'Dinner at the beach shack',
-                    controller: _descriptionController,
-                    textInputAction: TextInputAction.next,
-                    validator: (val) => (val == null || val.trim().isEmpty)
-                        ? 'Give the expense a name'
-                        : null,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-
                   const _FieldLabel('Category'),
                   const SizedBox(height: AppSpacing.xs),
                   _CategoryPicker(
@@ -428,30 +468,22 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     children: [
                       Expanded(
                         child: _PickerField(
-                          label: 'Group',
-                          value: selectedGroup?.name ?? 'No group',
-                          icon: Icons.groups_outlined,
-                          onTap: () => _pickGroup(state),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.xs),
-                      Expanded(
-                        child: _PickerField(
                           label: 'Date',
                           value: _formatDate(_selectedDate),
                           icon: Icons.calendar_today_rounded,
                           onTap: _pickDate,
                         ),
                       ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Expanded(
+                        child: _PickerField(
+                          label: 'Paid by',
+                          value: _payerName(activeMembers),
+                          icon: Icons.account_balance_wallet_outlined,
+                          onTap: () => _pickPayer(activeMembers),
+                        ),
+                      ),
                     ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-
-                  _PickerField(
-                    label: 'Paid by',
-                    value: _payerName(activeMembers),
-                    icon: Icons.account_balance_wallet_outlined,
-                    onTap: () => _pickPayer(activeMembers),
                   ),
                   const SizedBox(height: AppSpacing.xl),
 
@@ -522,27 +554,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return 'Today';
     }
     return '${d.day} ${months[d.month - 1]}';
-  }
-
-  Future<void> _pickGroup(StateManager state) async {
-    final selected = await showModalBottomSheet<String?>(
-      context: context,
-      builder: (sheetContext) => _OptionSheet(
-        title: 'Choose a group',
-        options: [
-          _Option(id: '', label: 'No group', icon: Icons.person_outline_rounded),
-          for (final g in state.groups)
-            _Option(id: g.id, label: g.name, icon: Icons.groups_rounded),
-        ],
-        selectedId: _groupId ?? '',
-      ),
-    );
-
-    if (selected == null || !mounted) return;
-    setState(() {
-      _groupId = selected.isEmpty ? null : selected;
-      _updateSelectedMembersForGroup(state);
-    });
   }
 
   Future<void> _pickPayer(List<Member> members) async {

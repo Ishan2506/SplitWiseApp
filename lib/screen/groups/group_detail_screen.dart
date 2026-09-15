@@ -184,7 +184,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                         context,
                         MaterialPageRoute(
                           builder: (_) =>
-                              AddExpenseScreen(preselectedGroupId: group.id),
+                              AddExpenseScreen(groupId: group.id),
                         ),
                       );
                       // Pull the new expense and the balances it moved.

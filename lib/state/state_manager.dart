@@ -301,12 +301,38 @@ class StateManager extends ChangeNotifier {
     );
 
     if (result['success'] == true) {
-      final user = result['user'] as UserModel;
-      _currentUserModel = user;
-      _updateOrAddUserModel(user);
-      notifyListeners();
+      _applyUpdatedUser(result['user'] as UserModel);
     }
     return result;
+  }
+
+  /// Uploads a new profile photo and refreshes the cached user.
+  Future<Map<String, dynamic>> uploadAvatar({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final result =
+        await ApiService.uploadAvatar(bytes: bytes, filename: filename);
+    if (result['success'] == true) {
+      _applyUpdatedUser(result['user'] as UserModel);
+    }
+    return result;
+  }
+
+  /// Removes the profile photo, falling back to the generated initials avatar.
+  Future<Map<String, dynamic>> removeAvatar() async {
+    final result = await ApiService.deleteAvatar();
+    if (result['success'] == true) {
+      _applyUpdatedUser(result['user'] as UserModel);
+    }
+    return result;
+  }
+
+  /// Stores an updated profile and republishes it to every listener.
+  void _applyUpdatedUser(UserModel user) {
+    _currentUserModel = user;
+    _updateOrAddUserModel(user);
+    notifyListeners();
   }
 
   /// Mirrors the real groups fetched from the API into the local [Group] and

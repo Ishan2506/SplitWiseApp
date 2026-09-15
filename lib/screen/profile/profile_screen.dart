@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../state/state_manager.dart';
+import 'edit_profile_screen.dart';
 import '../../state/group_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
@@ -50,7 +51,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _IdentityCard(
                   name: user.name,
                   email: user.email,
-                  onEdit: () => _editName(context, state),
+                  photoUrl: state.currentUserModel?.avatarUrl ?? '',
+                  onEdit: () => _openEditProfile(context),
                 ),
                 const SizedBox(height: AppSpacing.xl),
 
@@ -161,48 +163,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _editName(BuildContext context, StateManager state) async {
-    final controller = TextEditingController(text: state.currentUser.name);
-
-    final name = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.only(
-          left: AppSpacing.md,
-          right: AppSpacing.md,
-          top: AppSpacing.xs,
-          bottom: MediaQuery.viewInsetsOf(sheetContext).bottom + AppSpacing.md,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Edit your name',
-                style: Theme.of(sheetContext).textTheme.headlineSmall),
-            const SizedBox(height: AppSpacing.md),
-            PSTextField(
-              label: 'Name',
-              controller: controller,
-              autofocus: true,
-              placeholder: 'Your name',
-              textInputAction: TextInputAction.done,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            PSButton(
-              label: 'Save',
-              onPressed: () =>
-                  Navigator.pop(sheetContext, controller.text.trim()),
-            ),
-          ],
-        ),
-      ),
+  Future<void> _openEditProfile(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const EditProfileScreen()),
     );
-
-    if (!context.mounted) return;
-    if (name != null && name.isNotEmpty) {
-      showAppSnack(context, 'Name updated');
-    }
   }
 
   Future<void> _confirmLogout(BuildContext context, StateManager state) async {
@@ -249,11 +214,13 @@ class _IdentityCard extends StatelessWidget {
   final String name;
   final String email;
   final VoidCallback onEdit;
+  final String photoUrl;
 
   const _IdentityCard({
     required this.name,
     required this.email,
     required this.onEdit,
+    required this.photoUrl,
   });
 
   @override
@@ -267,7 +234,11 @@ class _IdentityCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          AvatarWidget.forName(name, size: 58),
+          AvatarWidget.forName(
+            name,
+            size: 58,
+            imageUrl: photoUrl.isEmpty ? null : photoUrl,
+          ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(

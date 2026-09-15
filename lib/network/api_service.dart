@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../model/group_model.dart';
 import '../model/user_model.dart';
@@ -9,9 +10,20 @@ import '../model/user_model.dart';
 class ApiService {
   // Physical Android phone: use the PC's LAN IP (phone + PC on same Wi-Fi).
   // Emulator would use 10.0.2.2; web/desktop uses localhost.
-  static const String baseUrl = kIsWeb
+  static const String _defaultBaseUrl = kIsWeb
       ? 'http://103.212.121.139:7000/api' //http://localhost:5000/api
       : 'http://103.212.121.139:7000/api';
+
+  /// Points the client at a different host. Tests set this to a local stub
+  /// server; it is null in a running app, which uses [_defaultBaseUrl].
+  @visibleForTesting
+  static String? baseUrlOverride;
+
+  static String get baseUrl => baseUrlOverride ?? _defaultBaseUrl;
+
+  /// Seeds the auth token without touching storage, for tests.
+  @visibleForTesting
+  static void debugSetToken(String? token) => _token = token;
 
   static String? _token;
 
@@ -311,6 +323,83 @@ class ApiService {
       }
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// POST /users/avatar — uploads a profile photo as multipart/form-data.
+  ///
+  /// [bytes] keeps this usable on web, where a file path is not available.
+  /// The server validates the type and size and returns the updated user.
+  static Future<Map<String, dynamic>> uploadAvatar({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/users/avatar'),
+      );
+      // Not _getHeaders(): that sets a JSON content type, which would break
+      // the multipart boundary.
+      if (_token != null) {
+        request.headers['Authorization'] = 'Bearer $_token';
+      }
+      request.headers['Accept'] = 'application/json';
+      request.files.add(http.MultipartFile.fromBytes(
+        'avatar',
+        bytes,
+        filename: filename,
+        contentType: _mediaTypeFor(filename),
+      ));
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+      final data = _decode(response);
+
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'user': UserModel.fromJson(data['user'])};
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not upload the photo',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// DELETE /users/avatar — drops the photo and falls back to initials.
+  static Future<Map<String, dynamic>> deleteAvatar() async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/users/avatar'),
+        headers: _getHeaders(),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'user': UserModel.fromJson(data['user'])};
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not remove the photo',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// The content type the server expects for an upload, from its extension.
+  /// The server only accepts these three, so anything else is sent as JPEG
+  /// and rejected there rather than being silently mislabelled here.
+  static MediaType _mediaTypeFor(String filename) {
+    final ext = filename.toLowerCase().split('.').last;
+    switch (ext) {
+      case 'png':
+        return MediaType('image', 'png');
+      case 'webp':
+        return MediaType('image', 'webp');
+      default:
+        return MediaType('image', 'jpeg');
     }
   }
 
