@@ -80,7 +80,8 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
                               size: 40, color: GroupColors.muted),
                           const SizedBox(height: 14),
                           const Text(
-                            'Everyone on the app is already in this group.',
+                            'No one left to add from your other groups.\n'
+                            'Invite someone new with a link or QR code.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                                 color: GroupColors.muted, fontSize: 13),
