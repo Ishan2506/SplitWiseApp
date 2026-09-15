@@ -664,4 +664,135 @@ class ApiService {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
+
+  // ---------------------------------------------------------------------
+  // Expenses
+  // ---------------------------------------------------------------------
+
+  /// Shapes an expense response the same way for every expense call.
+  static Future<Map<String, dynamic>> _expenseRequest(
+    Future<http.Response> Function() send, {
+    String fallbackError = 'Request failed',
+  }) async {
+    try {
+      final response = await send();
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {
+          'success': true,
+          if (data['expense'] != null)
+            'expense': Map<String, dynamic>.from(data['expense']),
+          if (data['expenses'] is List)
+            'expenses': (data['expenses'] as List? ?? [])
+                .whereType<Map<String, dynamic>>()
+                .toList(),
+          'message': ?data['message'],
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? fallbackError,
+        'statusCode': response.statusCode,
+        // The server sends this when an expense would push someone past the
+        // group's balance limit; the screen shows it as a specific warning.
+        if (data['limitExceeded'] == true) 'limitExceeded': true,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// POST /groups/:groupId/expenses — create an expense in a group.
+  ///
+  /// [splitType] is 'equal', 'exact' or 'percentage'. For the latter two,
+  /// [values] maps each participant id to their amount or percentage; the
+  /// server rebuilds and validates the splits from these.
+  static Future<Map<String, dynamic>> createExpense({
+    required String groupId,
+    required String description,
+    required double amount,
+    required String paidBy,
+    required List<String> participants,
+    String splitType = 'equal',
+    Map<String, double>? values,
+    DateTime? date,
+    String? notes,
+  }) =>
+      _expenseRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/groups/$groupId/expenses'),
+          headers: _getHeaders(),
+          body: jsonEncode({
+            'description': description,
+            'amount': amount,
+            'paidBy': paidBy,
+            'splitType': splitType,
+            'participants': participants,
+            'values': ?values,
+            'date': ?date?.toIso8601String(),
+            if (notes != null && notes.isNotEmpty) 'notes': notes,
+          }),
+        ),
+        fallbackError: 'Could not save the expense',
+      );
+
+  /// GET /groups/:groupId/expenses — every expense recorded in a group.
+  static Future<Map<String, dynamic>> getGroupExpenses(String groupId) =>
+      _expenseRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/groups/$groupId/expenses'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not load expenses',
+      );
+
+  /// GET /expenses/:id — a single expense with its splits populated.
+  static Future<Map<String, dynamic>> getExpense(String expenseId) =>
+      _expenseRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/expenses/$expenseId'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not load the expense',
+      );
+
+  /// PATCH /expenses/:id — only the fields passed are changed.
+  static Future<Map<String, dynamic>> updateExpense({
+    required String expenseId,
+    String? description,
+    double? amount,
+    String? paidBy,
+    List<String>? participants,
+    String? splitType,
+    Map<String, double>? values,
+    DateTime? date,
+    String? notes,
+  }) =>
+      _expenseRequest(
+        () => http.patch(
+          Uri.parse('$baseUrl/expenses/$expenseId'),
+          headers: _getHeaders(),
+          body: jsonEncode({
+            'description': ?description,
+            'amount': ?amount,
+            'paidBy': ?paidBy,
+            'participants': ?participants,
+            'splitType': ?splitType,
+            'values': ?values,
+            'date': ?date?.toIso8601String(),
+            'notes': ?notes,
+          }),
+        ),
+        fallbackError: 'Could not update the expense',
+      );
+
+  /// DELETE /expenses/:id
+  static Future<Map<String, dynamic>> deleteExpense(String expenseId) =>
+      _expenseRequest(
+        () => http.delete(
+          Uri.parse('$baseUrl/expenses/$expenseId'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not delete the expense',
+      );
 }

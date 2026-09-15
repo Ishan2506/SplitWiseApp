@@ -35,6 +35,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final Map<String, bool> _splitMembersSelected = {};
   final Map<String, TextEditingController> _customAmountControllers = {};
 
+  /// True while we are rewriting the custom-split fields ourselves, so the
+  /// controllers' onChanged does not treat our own text as a user edit.
+  bool _seedingCustomFields = false;
+
+  /// Set once the user types into a custom field: after that we stop
+  /// re-seeding the fields from the total behind their back.
+  bool _customFieldsTouched = false;
+
   static const _categories = <String, IconData>{
     'Food & drink': Icons.restaurant_rounded,
     'Travel': Icons.flight_takeoff_rounded,
@@ -71,8 +79,45 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
     for (final mId in memberIds) {
       _splitMembersSelected[mId] = true;
-      _customAmountControllers[mId] = TextEditingController(text: '0.00');
+      _customAmountControllers[mId] = TextEditingController();
     }
+
+    // A payer carried over from another group may not be in this one.
+    if (_paidById == null || !memberIds.contains(_paidById)) {
+      final currentUser = state.currentUserId;
+      _paidById = memberIds.contains(currentUser)
+          ? currentUser
+          : (memberIds.isNotEmpty ? memberIds.first : null);
+    }
+
+    _customFieldsTouched = false;
+    _seedCustomFields();
+  }
+
+  /// Fills the custom-split fields with the even share of the current total,
+  /// so switching to "Exact"/"Percentage" starts from a balanced split rather
+  /// than from zeros the user has to overwrite. Stops once the user edits.
+  void _seedCustomFields() {
+    if (_customFieldsTouched) return;
+
+    final ids = _selectedMemberIds;
+    _seedingCustomFields = true;
+    for (final entry in _customAmountControllers.entries) {
+      final isSelected = _splitMembersSelected[entry.key] ?? false;
+      if (!isSelected || ids.isEmpty) {
+        // Deselected people must not keep a stale value that would come back
+        // if they were re-selected.
+        entry.value.text = '';
+        continue;
+      }
+      final share = _splitType == SplitType.percentage
+          ? 100.0 / ids.length
+          : _amount / ids.length;
+      entry.value.text = _amount <= 0 && _splitType != SplitType.percentage
+          ? ''
+          : share.toStringAsFixed(2);
+    }
+    _seedingCustomFields = false;
   }
 
   double get _amount => double.tryParse(_amountController.text.trim()) ?? 0;
@@ -82,15 +127,22 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       .map((e) => e.key)
       .toList();
 
-  /// For custom splits, how much of the total is still unallocated.
+  /// Sum of what the user has typed for the people currently selected.
+  /// Deselected rows are ignored, so their leftover text can never count.
+  double get _assigned => _selectedMemberIds.fold<double>(
+        0,
+        (sum, id) =>
+            sum +
+            (double.tryParse(_customAmountControllers[id]?.text.trim() ?? '') ??
+                0),
+      );
+
+  /// For custom splits, how much is still unallocated: rupees for an exact
+  /// split, percentage points for a percentage split.
   double get _remainder {
     if (_splitType == SplitType.equal) return 0;
-    final assigned = _selectedMemberIds.fold<double>(
-      0,
-      (sum, id) =>
-          sum + (double.tryParse(_customAmountControllers[id]?.text ?? '') ?? 0),
-    );
-    return _amount - assigned;
+    final target = _splitType == SplitType.percentage ? 100.0 : _amount;
+    return target - _assigned;
   }
 
   Future<void> _saveExpense() async {
@@ -103,13 +155,39 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
-    if (_splitType == SplitType.exact && _remainder.abs() > 0.01) {
-      showAppSnack(
-        context,
-        'Split amounts must add up to ${formatMoney(_amount)}',
-        success: false,
-      );
+    if (_paidById == null) {
+      showAppSnack(context, 'Choose who paid', success: false);
       return;
+    }
+
+    if (_splitType != SplitType.equal) {
+      // Every custom field must be a real, non-negative number.
+      for (final id in selectedSplitMembers) {
+        final raw = _customAmountControllers[id]?.text.trim() ?? '';
+        final parsed = double.tryParse(raw);
+        if (raw.isEmpty || parsed == null || parsed < 0) {
+          showAppSnack(
+            context,
+            _splitType == SplitType.percentage
+                ? 'Give everyone a valid percentage'
+                : 'Give everyone a valid amount',
+            success: false,
+          );
+          return;
+        }
+      }
+
+      if (_remainder.abs() > 0.01) {
+        showAppSnack(
+          context,
+          _splitType == SplitType.percentage
+              ? 'Percentages must add up to 100% (currently '
+                  '${_assigned.toStringAsFixed(2)}%)'
+              : 'Split amounts must add up to ${formatMoney(_amount)}',
+          success: false,
+        );
+        return;
+      }
     }
 
     setState(() => _isSaving = true);
@@ -117,30 +195,46 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     final state = Provider.of<StateManager>(context, listen: false);
     final amount = double.parse(_amountController.text.trim());
 
+    final description = _descriptionController.text.trim();
+
     try {
-      final expense = Expense(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        description: _descriptionController.text.trim(),
+      final result = await state.saveExpense(
+        description: description,
         amount: amount,
-        date: _selectedDate,
         paidById: _paidById!,
         splitType: _splitType,
+        participants: selectedSplitMembers,
         splits: _calculateSplits(amount, selectedSplitMembers),
+        // The server recomputes the splits from these, so an exact or
+        // percentage expense is validated in one place rather than two.
+        values: _splitType == SplitType.equal
+            ? null
+            : _customValues(selectedSplitMembers),
         groupId: _groupId,
+        date: _selectedDate,
+        notes: _notesController.text.trim(),
       );
 
-      state.addExpense(expense);
+      if (!mounted) return;
+
+      if (result['success'] != true) {
+        showAppSnack(
+          context,
+          (result['message'] ?? 'Could not save the expense').toString(),
+          success: false,
+        );
+        return;
+      }
+
       state.pushNotification(
         kind: ActivityKind.expenseAdded,
-        title: 'You added "${expense.description}"',
+        title: 'You added "$description"',
         subtitle:
             '${formatMoney(amount)} · split ${selectedSplitMembers.length} ways',
       );
 
-      if (mounted) {
-        showAppSnack(context, 'Expense saved');
-        Navigator.pop(context);
-      }
+      showAppSnack(context, 'Expense saved');
+      Navigator.pop(context);
     } catch (e) {
       if (mounted) showAppSnack(context, 'Could not save: $e', success: false);
     } finally {
@@ -148,16 +242,103 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     }
   }
 
+  /// The raw numbers the user typed, in the unit of the current split type:
+  /// rupees for an exact split, percentage points for a percentage split.
+  Map<String, double> _customValues(List<String> members) => {
+        for (final m in members)
+          m: double.tryParse(_customAmountControllers[m]?.text.trim() ?? '') ??
+              0,
+      };
+
+  /// Builds the stored split map. Every branch returns *rupee amounts* that
+  /// sum exactly to [total] — the last member absorbs any rounding drift, so
+  /// splitting 100 three ways stores 33.33/33.33/33.34 rather than three
+  /// figures that quietly lose a paisa.
   Map<String, double> _calculateSplits(double total, List<String> members) {
     if (members.isEmpty) return {};
-    if (_splitType == SplitType.equal) {
-      final perMember = total / members.length;
-      return {for (var m in members) m: perMember};
+
+    final splits = <String, double>{};
+
+    switch (_splitType) {
+      case SplitType.equal:
+        final per = _round2(total / members.length);
+        for (final m in members) {
+          splits[m] = per;
+        }
+        break;
+
+      case SplitType.exact:
+        for (final m in members) {
+          splits[m] = _round2(
+              double.tryParse(_customAmountControllers[m]?.text.trim() ?? '') ??
+                  0);
+        }
+        break;
+
+      case SplitType.percentage:
+        for (final m in members) {
+          final pct =
+              double.tryParse(_customAmountControllers[m]?.text.trim() ?? '') ??
+                  0;
+          splits[m] = _round2(total * pct / 100.0);
+        }
+        break;
     }
-    return {
-      for (var m in members)
-        m: double.tryParse(_customAmountControllers[m]?.text ?? '0') ?? 0
-    };
+
+    _absorbRoundingDrift(splits, members, total);
+    return splits;
+  }
+
+  /// Nudges the last participant so the shares add up to the total to the paisa.
+  void _absorbRoundingDrift(
+      Map<String, double> splits, List<String> members, double total) {
+    final sum = splits.values.fold<double>(0, (a, b) => a + b);
+    final drift = _round2(_round2(total) - sum);
+    if (drift != 0) {
+      final last = members.last;
+      splits[last] = _round2((splits[last] ?? 0) + drift);
+    }
+  }
+
+  static double _round2(double n) => (n * 100).roundToDouble() / 100;
+
+  void _onSplitTypeChanged(SplitType type) {
+    if (type == _splitType) return;
+    setState(() {
+      _splitType = type;
+      // Exact amounts and percentages are different units, so values typed for
+      // one are meaningless for the other: start the new mode from an even
+      // split the user can adjust.
+      _customFieldsTouched = false;
+      _seedCustomFields();
+    });
+  }
+
+  void _onMemberToggled(String id, bool value) {
+    setState(() {
+      _splitMembersSelected[id] = value;
+      if (!value) {
+        // Clear the row so a stale figure cannot reappear on re-selection.
+        _seedingCustomFields = true;
+        _customAmountControllers[id]?.text = '';
+        _seedingCustomFields = false;
+      }
+      // Changing who is involved changes everyone's even share.
+      _seedCustomFields();
+    });
+  }
+
+  void _onCustomAmountChanged() {
+    if (_seedingCustomFields) return;
+    setState(() => _customFieldsTouched = true);
+  }
+
+  /// Puts the custom fields back to an even split.
+  void _resetCustomFields() {
+    setState(() {
+      _customFieldsTouched = false;
+      _seedCustomFields();
+    });
   }
 
   @override
@@ -218,7 +399,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   const SizedBox(height: AppSpacing.xs),
                   _AmountField(
                     controller: _amountController,
-                    onChanged: (_) => setState(() {}),
+                    onChanged: (_) => setState(_seedCustomFields),
                   ),
                   const SizedBox(height: AppSpacing.lg),
 
@@ -277,7 +458,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   const SectionHeader(title: 'Split'),
                   _SplitTypeToggle(
                     value: _splitType,
-                    onChanged: (t) => setState(() => _splitType = t),
+                    onChanged: _onSplitTypeChanged,
                   ),
                   const SizedBox(height: AppSpacing.sm),
 
@@ -287,14 +468,18 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     controllers: _customAmountControllers,
                     splitType: _splitType,
                     total: _amount,
-                    onToggle: (id, v) =>
-                        setState(() => _splitMembersSelected[id] = v),
-                    onAmountChanged: () => setState(() {}),
+                    onToggle: _onMemberToggled,
+                    onAmountChanged: _onCustomAmountChanged,
                   ),
 
-                  if (_splitType == SplitType.exact) ...[
+                  if (_splitType != SplitType.equal) ...[
                     const SizedBox(height: AppSpacing.xs),
-                    _RemainderBar(remainder: _remainder, total: _amount),
+                    _RemainderBar(
+                      remainder: _remainder,
+                      total: _amount,
+                      isPercentage: _splitType == SplitType.percentage,
+                      onReset: _resetCustomFields,
+                    ),
                   ],
 
                   const SizedBox(height: AppSpacing.lg),
@@ -681,8 +866,9 @@ class _SplitTypeToggle extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _segment('Split equally', SplitType.equal),
-          _segment('Exact amounts', SplitType.exact),
+          _segment('Equally', SplitType.equal),
+          _segment('Exact', SplitType.exact),
+          _segment('Percentage', SplitType.percentage),
         ],
       ),
     );
@@ -739,7 +925,8 @@ class _SplitList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedCount = selected.values.where((v) => v).length;
+    final selectedCount =
+        members.where((m) => selected[m.id] ?? false).length;
     final perHead = selectedCount > 0 ? total / selectedCount : 0.0;
 
     return Container(
@@ -763,6 +950,13 @@ class _SplitList extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// What this member's typed percentage comes to in rupees.
+  double _percentShare(String memberId) {
+    final pct =
+        double.tryParse(controllers[memberId]?.text.trim() ?? '') ?? 0;
+    return total * pct / 100.0;
   }
 
   Widget _row(BuildContext context, Member member, double perHead) {
@@ -818,9 +1012,23 @@ class _SplitList extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 )
-              else
+              else ...[
+                // For a percentage split, show what the percent works out to
+                // in rupees so the figure is never a guess.
+                if (splitType == SplitType.percentage)
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.xs),
+                    child: Text(
+                      formatMoney(_percentShare(member.id), decimals: true),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
                 SizedBox(
-                  width: 96,
+                  width: splitType == SplitType.percentage ? 84 : 96,
                   child: TextField(
                     controller: controllers[member.id],
                     onChanged: (_) => onAmountChanged(),
@@ -836,14 +1044,18 @@ class _SplitList extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
                     ),
-                    decoration: const InputDecoration(
-                      prefixText: '₹',
+                    decoration: InputDecoration(
+                      prefixText:
+                          splitType == SplitType.percentage ? null : '₹',
+                      suffixText:
+                          splitType == SplitType.percentage ? '%' : null,
                       isDense: true,
-                      contentPadding: EdgeInsets.symmetric(
+                      contentPadding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 10),
                     ),
                   ),
                 ),
+              ],
             ],
           ),
         ),
@@ -856,8 +1068,20 @@ class _SplitList extends StatelessWidget {
 class _RemainderBar extends StatelessWidget {
   final double remainder;
   final double total;
+  final bool isPercentage;
+  final VoidCallback onReset;
 
-  const _RemainderBar({required this.remainder, required this.total});
+  const _RemainderBar({
+    required this.remainder,
+    required this.total,
+    required this.isPercentage,
+    required this.onReset,
+  });
+
+  /// Formats a leftover/overshoot in the unit the current split uses.
+  String _unit(double value) => isPercentage
+      ? '${value.toStringAsFixed(2)}%'
+      : formatMoney(value, decimals: true);
 
   @override
   Widget build(BuildContext context) {
@@ -887,10 +1111,12 @@ class _RemainderBar extends StatelessWidget {
           Expanded(
             child: Text(
               balanced
-                  ? 'Splits add up to ${formatMoney(total)}'
+                  ? (isPercentage
+                      ? 'Percentages add up to 100%'
+                      : 'Splits add up to ${formatMoney(total)}')
                   : over
-                      ? '${formatMoney(remainder.abs())} over the total'
-                      : '${formatMoney(remainder)} left to assign',
+                      ? '${_unit(remainder.abs())} over'
+                      : '${_unit(remainder)} left to assign',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -898,6 +1124,23 @@ class _RemainderBar extends StatelessWidget {
               ),
             ),
           ),
+          if (!balanced)
+            GestureDetector(
+              onTap: onReset,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+                child: Text(
+                  'Split evenly',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primaryDark,
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppColors.primaryDark,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

@@ -42,10 +42,13 @@ class _SettleUpDialogState extends State<SettleUpDialog> {
     _groupId = widget.initialGroupId;
     final state = Provider.of<StateManager>(context, listen: false);
 
-    // Default to someone else paying the signed-in user.
-    _fromMemberId = state.currentUserId == 'm1' && state.members.length > 1
-        ? 'm2'
-        : state.currentUserId;
+    // Default to someone else paying the signed-in user: pick the first other
+    // member if there is one, rather than assuming a fixed id.
+    final others = state.members
+        .where((m) => m.id != state.currentUserId)
+        .map((m) => m.id)
+        .toList();
+    _fromMemberId = others.isNotEmpty ? others.first : state.currentUserId;
     _toMemberId = state.currentUserId;
   }
 

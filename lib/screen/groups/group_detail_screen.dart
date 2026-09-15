@@ -30,7 +30,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     super.initState();
     // Balances change whenever anyone adds an expense, so always refetch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<GroupProvider>().refreshGroup(widget.groupId);
+      context.read<StateManager>().loadGroupExpenses(widget.groupId);
     });
   }
 
@@ -177,13 +179,19 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                         provider.refreshGroup(group.id);
                       }
                     },
-                    onAddExpense: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            AddExpenseScreen(preselectedGroupId: group.id),
-                      ),
-                    ),
+                    onAddExpense: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              AddExpenseScreen(preselectedGroupId: group.id),
+                        ),
+                      );
+                      // Pull the new expense and the balances it moved.
+                      if (!context.mounted) return;
+                      provider.refreshGroup(group.id);
+                      context.read<StateManager>().loadGroupExpenses(group.id);
+                    },
                   ),
                   if (group.hasBalanceLimit) ...[
                     const SizedBox(height: AppSpacing.md),

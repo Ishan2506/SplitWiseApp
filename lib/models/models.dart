@@ -59,6 +59,61 @@ class Expense {
     required this.splits,
     this.groupId,
   });
+
+  /// Builds an expense from the server payload.
+  ///
+  /// The API returns `splits` as a list of `{user, amount}` where `user` may be
+  /// a populated object or a bare id, and where `amount` is always the member's
+  /// resolved share in rupees regardless of the split type.
+  factory Expense.fromJson(Map<String, dynamic> json) {
+    String idOf(dynamic value) {
+      if (value is Map) return (value['_id'] ?? value['id'] ?? '').toString();
+      return (value ?? '').toString();
+    }
+
+    final splits = <String, double>{};
+    for (final raw in (json['splits'] as List? ?? [])) {
+      if (raw is! Map) continue;
+      final memberId = idOf(raw['user']);
+      if (memberId.isEmpty) continue;
+      splits[memberId] = (raw['amount'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    return Expense(
+      id: idOf(json['_id'] ?? json['id']),
+      description: (json['description'] ?? '').toString(),
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      date: DateTime.tryParse((json['date'] ?? '').toString())?.toLocal() ??
+          DateTime.now(),
+      paidById: idOf(json['paidBy']),
+      splitType: _splitTypeFrom(json['splitType']),
+      splits: splits,
+      groupId: idOf(json['group']).isEmpty ? null : idOf(json['group']),
+    );
+  }
+
+  static SplitType _splitTypeFrom(dynamic value) {
+    switch ((value ?? '').toString()) {
+      case 'exact':
+        return SplitType.exact;
+      case 'percentage':
+        return SplitType.percentage;
+      default:
+        return SplitType.equal;
+    }
+  }
+
+  /// Wire value the API expects for this split type.
+  static String splitTypeToApi(SplitType type) {
+    switch (type) {
+      case SplitType.exact:
+        return 'exact';
+      case SplitType.percentage:
+        return 'percentage';
+      case SplitType.equal:
+        return 'equal';
+    }
+  }
 }
 
 class Payment {

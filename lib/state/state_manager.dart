@@ -48,14 +48,15 @@ class StateManager extends ChangeNotifier {
   final List<Payment> _payments = [];
   final List<AppNotification> _notifications = [];
 
-  String _currentUserId = 'm1';
+  /// Empty until a real session is restored or a user signs in.
+  String _currentUserId = '';
   bool _isLoggedIn = false;
   String? _authErrorMessage;
   UserModel? _currentUserModel;
 
   StateManager() {
-    _loadMockData();
-    _seedNotifications();
+    // Nothing is seeded: members and groups arrive via [syncGroupsFromApi],
+    // expenses via [loadGroupExpenses], and activity as real events occur.
     _sessionRestored = _initializeSession();
   }
 
@@ -157,8 +158,8 @@ class StateManager extends ChangeNotifier {
 
   /// The signed-in user as a [Member].
   ///
-  /// After a real login `_currentUserId` is a server-issued id that is not in
-  /// the seeded member list, and the list is only filled in once groups load.
+  /// After a real login `_currentUserId` is a server-issued id, and the member
+  /// list is only filled in once the user's groups load.
   /// Falling back to the authenticated profile (and finally to a placeholder)
   /// keeps this from throwing and blanking whatever screen is building.
   Member get currentUser {
@@ -185,17 +186,6 @@ class StateManager extends ChangeNotifier {
       if (m.id == id) return m;
     }
     return null;
-  }
-
-  void setCurrentUser(String id) {
-    _currentUserId = id;
-    notifyListeners();
-  }
-
-  void login(String memberId) {
-    _currentUserId = memberId;
-    _isLoggedIn = true;
-    notifyListeners();
   }
 
   // Real Google Sign-In: gets an idToken from Google, sends it to the backend,
@@ -274,11 +264,14 @@ class StateManager extends ChangeNotifier {
     _authErrorMessage = null;
     // Drop the signed-out user's identity and data so nothing of theirs is
     // still on screen if someone else signs in on this device.
-    _currentUserId = 'm1';
+    _currentUserId = '';
     _notifications.clear();
     _expenses.clear();
     _payments.clear();
     _groups.clear();
+    // The member list is built from the previous user's groups, so it is
+    // theirs too and must not survive into the next session.
+    _members.clear();
 
     onSignedOut?.call();
     notifyListeners();
@@ -316,139 +309,13 @@ class StateManager extends ChangeNotifier {
     return result;
   }
 
-  // Prepopulate mock data
-  void _loadMockData() {
-    // Add default members
-    _members.addAll([
-      Member(id: 'm1', name: 'You', email: 'you@example.com', avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=You'),
-      Member(id: 'm2', name: 'Amit Sharma', email: 'amit@example.com', avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Amit'),
-      Member(id: 'm3', name: 'Rahul Verma', email: 'rahul@example.com', avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Rahul'),
-      Member(id: 'm4', name: 'Priya Patel', email: 'priya@example.com', avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Priya'),
-      Member(id: 'm5', name: 'Sneha Reddy', email: 'sneha@example.com', avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Sneha'),
-    ]);
-
-    // Add groups
-    _groups.addAll([
-      Group(
-        id: 'g1',
-        name: 'Flatmates 302',
-        description: 'Rent, electricity and grocery splitting',
-        memberIds: ['m1', 'm2', 'm3', 'm4'],
-        category: 'Home',
-      ),
-      Group(
-        id: 'g2',
-        name: 'Goa Trip 2026',
-        description: 'Fun times, car rental, and beach shacks',
-        memberIds: ['m1', 'm2', 'm5'],
-        category: 'Trip',
-      ),
-    ]);
-
-    // Add initial expenses
-    _expenses.addAll([
-      Expense(
-        id: 'e1',
-        description: 'Monthly Rent',
-        amount: 24000.0,
-        date: DateTime.now().subtract(const Duration(days: 5)),
-        paidById: 'm1', // You paid
-        splitType: SplitType.equal,
-        splits: {'m1': 0, 'm2': 0, 'm3': 0, 'm4': 0},
-        groupId: 'g1',
-      ),
-      Expense(
-        id: 'e2',
-        description: 'Internet Bill',
-        amount: 1200.0,
-        date: DateTime.now().subtract(const Duration(days: 3)),
-        paidById: 'm2', // Amit paid
-        splitType: SplitType.equal,
-        splits: {'m1': 0, 'm2': 0, 'm3': 0, 'm4': 0},
-        groupId: 'g1',
-      ),
-      Expense(
-        id: 'e3',
-        description: 'Car Rental',
-        amount: 9000.0,
-        date: DateTime.now().subtract(const Duration(days: 2)),
-        paidById: 'm1', // You paid
-        splitType: SplitType.equal,
-        splits: {'m1': 0, 'm2': 0, 'm5': 0},
-        groupId: 'g2',
-      ),
-      Expense(
-        id: 'e4',
-        description: 'Beach Shack Dinner',
-        amount: 4500.0,
-        date: DateTime.now().subtract(const Duration(days: 1)),
-        paidById: 'm5', // Sneha paid
-        splitType: SplitType.equal,
-        splits: {'m1': 0, 'm2': 0, 'm5': 0},
-        groupId: 'g2',
-      ),
-      Expense(
-        id: 'e5',
-        description: 'Movie Tickets (Private)',
-        amount: 800.0,
-        date: DateTime.now().subtract(const Duration(hours: 4)),
-        paidById: 'm1', // You paid
-        splitType: SplitType.equal,
-        splits: {'m1': 0, 'm2': 0}, // Split with Amit
-        groupId: null,
-      ),
-    ]);
-
-    // Initial payments (settlements)
-    _payments.addAll([
-      Payment(
-        id: 'p1',
-        fromMemberId: 'm2', // Amit settled 5000 to You
-        toMemberId: 'm1',
-        amount: 5000.0,
-        date: DateTime.now().subtract(const Duration(days: 2)),
-        groupId: 'g1',
-      )
-    ]);
-  }
-
-  // Add methods
-  void addMember(String name, String email) {
-    final id = 'm${_members.length + 1}';
-    final member = Member(
-      id: id,
-      name: name,
-      email: email,
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=$name',
-    );
-    _members.add(member);
-    notifyListeners();
-  }
-
-  void addGroup(String name, String description, List<String> memberIds, String category) {
-    final id = 'g${_groups.length + 1}';
-    // Ensure current user is in the group
-    if (!memberIds.contains(_currentUserId)) {
-      memberIds = [_currentUserId, ...memberIds];
-    }
-    final group = Group(
-      id: id,
-      name: name,
-      description: description,
-      memberIds: memberIds,
-      category: category,
-    );
-    _groups.add(group);
-    notifyListeners();
-  }
-
-  /// Mirrors the real groups fetched from the API into the legacy [Group] and
+  /// Mirrors the real groups fetched from the API into the local [Group] and
   /// [Member] lists.
   ///
-  /// Groups themselves are served by `GroupProvider` now, but the expense and
-  /// settle-up screens still work against these local models. Keeping the two
-  /// in step means those screens offer the user's actual groups and the people
-  /// really in them, rather than the seeded sample data.
+  /// Groups themselves are served by `GroupProvider`, but the expense, history
+  /// and settle-up screens work against these models. Keeping the two in step
+  /// means those screens offer the user's actual groups and the people really
+  /// in them — this is now the only source of that data.
   void syncGroupsFromApi(List<GroupModel> apiGroups) {
     _groups
       ..clear()
@@ -492,6 +359,80 @@ class StateManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Saves an expense to the server and keeps the stored copy in sync.
+  ///
+  /// The server is the authority on the splits: it rebuilds them from
+  /// [participants]/[values] and returns the resolved per-person amounts, so
+  /// the local copy comes from the response rather than from the optimistic
+  /// one. Returns `{success, message}` for the caller to surface.
+  ///
+  /// An expense with no group has no server route to live on, so it is held
+  /// locally only.
+  Future<Map<String, dynamic>> saveExpense({
+    required String description,
+    required double amount,
+    required String paidById,
+    required SplitType splitType,
+    required List<String> participants,
+    required Map<String, double> splits,
+    Map<String, double>? values,
+    String? groupId,
+    DateTime? date,
+    String? notes,
+  }) async {
+    if (groupId == null || groupId.isEmpty) {
+      addExpense(Expense(
+        id: 'local-${DateTime.now().millisecondsSinceEpoch}',
+        description: description,
+        amount: amount,
+        date: date ?? DateTime.now(),
+        paidById: paidById,
+        splitType: splitType,
+        splits: splits,
+      ));
+      return {'success': true, 'local': true};
+    }
+
+    final result = await ApiService.createExpense(
+      groupId: groupId,
+      description: description,
+      amount: amount,
+      paidBy: paidById,
+      participants: participants,
+      splitType: Expense.splitTypeToApi(splitType),
+      values: values,
+      date: date,
+      notes: notes,
+    );
+
+    if (result['success'] == true && result['expense'] != null) {
+      addExpense(Expense.fromJson(
+          Map<String, dynamic>.from(result['expense'] as Map)));
+      return {'success': true};
+    }
+
+    return {
+      'success': false,
+      'message': result['message'] ?? 'Could not save the expense',
+      if (result['limitExceeded'] == true) 'limitExceeded': true,
+    };
+  }
+
+  /// Replaces the locally held expenses for a group with the server's copy.
+  Future<void> loadGroupExpenses(String groupId) async {
+    final result = await ApiService.getGroupExpenses(groupId);
+    if (result['success'] != true) return;
+
+    final fetched = (result['expenses'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(Expense.fromJson)
+        .toList();
+
+    _expenses.removeWhere((e) => e.groupId == groupId);
+    _expenses.addAll(fetched);
+    notifyListeners();
+  }
+
   void addPayment(Payment payment) {
     _payments.add(payment);
     notifyListeners();
@@ -518,30 +459,30 @@ class StateManager extends ChangeNotifier {
       // Crediting the payer
       balances[payerId] = (balances[payerId] ?? 0.0) + amount;
 
-      // Debiting splitting members
+      // Debiting splitting members.
+      //
+      // `splits` holds each member's resolved share in rupees, whatever the
+      // split type was — percentages are converted to amounts when the expense
+      // is saved. Re-deriving them here from splitType would double-apply the
+      // conversion, so the stored amounts are used as-is.
       final splitMembers = expense.splits.keys.toList();
       if (splitMembers.isEmpty) continue;
 
-      switch (expense.splitType) {
-        case SplitType.equal:
-          final share = amount / splitMembers.length;
-          for (var mId in splitMembers) {
-            balances[mId] = (balances[mId] ?? 0.0) - share;
-          }
-          break;
-        case SplitType.exact:
-          for (var mId in splitMembers) {
-            final share = expense.splits[mId] ?? 0.0;
-            balances[mId] = (balances[mId] ?? 0.0) - share;
-          }
-          break;
-        case SplitType.percentage:
-          for (var mId in splitMembers) {
-            final percent = expense.splits[mId] ?? 0.0;
-            final share = amount * (percent / 100.0);
-            balances[mId] = (balances[mId] ?? 0.0) - share;
-          }
-          break;
+      final storedTotal =
+          expense.splits.values.fold<double>(0.0, (a, b) => a + b);
+
+      if (storedTotal <= 0) {
+        // Defensive: an expense that arrived without per-person shares falls
+        // back to an even split so it still reconciles against the payer's
+        // credit instead of leaving the books unbalanced.
+        final share = amount / splitMembers.length;
+        for (var mId in splitMembers) {
+          balances[mId] = (balances[mId] ?? 0.0) - share;
+        }
+      } else {
+        for (var mId in splitMembers) {
+          balances[mId] = (balances[mId] ?? 0.0) - (expense.splits[mId] ?? 0.0);
+        }
       }
     }
 
@@ -712,50 +653,5 @@ class StateManager extends ChangeNotifier {
       ),
     );
     notifyListeners();
-  }
-
-  void _seedNotifications() {
-    final now = DateTime.now();
-    _notifications.addAll([
-      AppNotification(
-        id: 'n1',
-        kind: ActivityKind.expenseAdded,
-        title: 'Rahul added "Beach shack dinner"',
-        subtitle: '₹4,800 · your share ₹1,200',
-        time: now.subtract(const Duration(minutes: 2)),
-      ),
-      AppNotification(
-        id: 'n2',
-        kind: ActivityKind.settled,
-        title: 'Priya settled ₹800 with you',
-        subtitle: 'Balances updated',
-        time: now.subtract(const Duration(hours: 1)),
-        isRead: true,
-      ),
-      AppNotification(
-        id: 'n3',
-        kind: ActivityKind.edited,
-        title: 'Aman edited "Groceries"',
-        subtitle: '₹2,100 → ₹2,350',
-        time: now.subtract(const Duration(days: 1)),
-        isRead: true,
-      ),
-      AppNotification(
-        id: 'n4',
-        kind: ActivityKind.memberJoined,
-        title: 'Sneha joined Goa Trip 2026',
-        subtitle: 'Invited by you',
-        time: now.subtract(const Duration(days: 2)),
-        isRead: true,
-      ),
-      AppNotification(
-        id: 'n5',
-        kind: ActivityKind.groupCreated,
-        title: 'You were added to Team lunches',
-        subtitle: '8 members',
-        time: now.subtract(const Duration(days: 3)),
-        isRead: true,
-      ),
-    ]);
   }
 }
