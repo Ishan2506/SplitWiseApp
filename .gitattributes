@@ -1,0 +1,5 @@
+# Shell scripts must keep LF endings; Xcode Cloud runs them on macOS and
+# CRLF causes "bad interpreter: no such file or directory".
+*.sh text eol=lf
+ios/ci_scripts/* text eol=lf
+ios/Podfile text eol=lf
