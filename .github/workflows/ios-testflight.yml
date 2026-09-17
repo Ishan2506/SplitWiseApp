@@ -1,0 +1,133 @@
+name: iOS TestFlight
+
+# Manual runs, plus any push of a v* tag (e.g. v1.0.3).
+# Tag pushes are the release path; workflow_dispatch is for testing the pipeline.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build and upload to TestFlight
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.1'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Excludes the e2e tag: those tests drive a real backend on
+      # 127.0.0.1:7000, which no CI runner has.
+      - name: Run tests
+        run: flutter test --exclude-tags e2e
+
+      # Builds the .app without signing it. Signing happens in the
+      # archive step below, using the certificate imported beforehand.
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Import signing certificate and profile
+        env:
+          CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        run: |
+          set -eo pipefail
+
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          # Random password for an ephemeral keychain that is destroyed
+          # when the runner is torn down.
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+
+          echo "$CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
+          echo "$PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$CERT_PATH" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          # Lets codesign use the key without an interactive prompt.
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH" > /dev/null
+
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/"
+
+      - name: Build signed archive
+        run: |
+          set -eo pipefail
+          xcodebuild -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -allowProvisioningUpdates \
+            archive
+
+      - name: Export IPA
+        run: |
+          set -eo pipefail
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/build" \
+            -allowProvisioningUpdates
+
+      - name: Upload to TestFlight
+        env:
+          API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+        run: |
+          set -eo pipefail
+
+          # altool looks for the key in this exact location and filename.
+          mkdir -p "$HOME/private_keys"
+          echo "$API_PRIVATE_KEY" | base64 --decode \
+            > "$HOME/private_keys/AuthKey_${API_KEY_ID}.p8"
+
+          # Resolve the IPA by glob: the filename follows PRODUCT_NAME
+          # (Runner), so do not hardcode it.
+          IPA_PATH="$(find "$RUNNER_TEMP/build" -maxdepth 1 -name "*.ipa" | head -1)"
+          if [ -z "$IPA_PATH" ]; then
+            echo "No .ipa found in $RUNNER_TEMP/build"
+            ls -la "$RUNNER_TEMP/build"
+            exit 1
+          fi
+          echo "Uploading $IPA_PATH"
+
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$API_KEY_ID" \
+            --apiIssuer "$API_ISSUER_ID"
+
+      - name: Clean up secrets
+        if: always()
+        run: |
+          rm -rf "$HOME/private_keys"
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/profile.mobileprovision"
+          security delete-keychain "$RUNNER_TEMP/build.keychain" || true
