@@ -8,6 +8,11 @@
 /// confidence instead of guessing harder.
 library;
 
+import 'receipt_geometry.dart';
+import 'receipt_items.dart';
+
+export 'receipt_items.dart' show ReceiptItem;
+
 /// How much we trust one extracted field.
 enum FieldConfidence { high, medium, low }
 
@@ -42,12 +47,20 @@ class ReceiptData {
   /// when a field looks wrong.
   final String rawText;
 
+  /// The individual lines of the bill, when the scan had position data and the
+  /// receipt was laid out readably. Empty otherwise — plenty of receipts scan
+  /// well enough for a total but not for a reliable item list, and an empty
+  /// list says so honestly. Splitting by item is offered only when this is
+  /// populated.
+  final List<ReceiptItem> items;
+
   const ReceiptData({
     required this.merchant,
     required this.total,
     required this.date,
     required this.category,
     required this.rawText,
+    this.items = const [],
   });
 
   const ReceiptData.empty()
@@ -55,7 +68,31 @@ class ReceiptData {
         total = const ExtractedField.missing(),
         date = const ExtractedField.missing(),
         category = const ExtractedField.missing(),
-        rawText = '';
+        rawText = '',
+        items = const [];
+
+  /// What the items add up to.
+  double get itemsTotal =>
+      items.fold<double>(0, (sum, i) => sum + i.lineTotal);
+
+  /// Whether the items are worth offering as a split basis.
+  ///
+  /// They must exist, and they must roughly reconcile with the total the
+  /// receipt printed. Items that do not add up mean rows were missed or
+  /// double-read, and splitting by them would quietly misallocate money — so
+  /// in that case we keep them visible for checking but do not treat them as
+  /// a trustworthy basis for division.
+  bool get itemsReconcile {
+    if (items.isEmpty) return false;
+    final printed = total.value;
+    if (printed == null || printed <= 0) return false;
+    // Items sum to at most the total: tax and charges are added after, so
+    // items under the total is normal and items over it is a misread.
+    // A fifth of the bill is about as much tax and service as any receipt
+    // carries, so a shortfall beyond that means rows were missed.
+    final ratio = itemsTotal / printed;
+    return ratio > 0.8 && ratio <= 1.02;
+  }
 
   /// How many of the four fields we actually found — the "We read N fields"
   /// line on the review screen.
@@ -160,6 +197,38 @@ class ReceiptParser {
       date: date,
       category: category,
       rawText: rawText,
+    );
+  }
+
+  /// Reads a receipt using the position of each piece of text as well as its
+  /// content.
+  ///
+  /// The four headline fields are read exactly as [parse] reads them — from
+  /// the text, which is what they respond to. The positions add the one thing
+  /// text alone cannot give: which name belongs to which price, and therefore
+  /// the item list.
+  ///
+  /// [tokens] are the recognised words with their boxes, and [imageWidth] the
+  /// width of the image they were measured in. When the layout cannot be read
+  /// this degrades to exactly the [parse] result rather than failing.
+  static ReceiptData parseWithLayout({
+    required String rawText,
+    required List<OcrToken> tokens,
+    required double imageWidth,
+  }) {
+    final base = parse(rawText);
+    if (tokens.isEmpty || imageWidth <= 0) return base;
+
+    final itemised = extractItems(buildRows(tokens), imageWidth);
+    if (itemised.isEmpty) return base;
+
+    return ReceiptData(
+      merchant: base.merchant,
+      total: base.total,
+      date: base.date,
+      category: base.category,
+      rawText: base.rawText,
+      items: itemised.items,
     );
   }
 

@@ -51,6 +51,20 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   /// the common case for a shared receipt.
   final Map<String, bool> _splitWith = {};
 
+  /// The items read off the bill, editable here. Held in state rather than
+  /// read from the scan each build, because the user can correct them.
+  late List<ReceiptItem> _items;
+
+  /// Who is down for each item, keyed by the item's index in [_items].
+  /// An item nobody is assigned to is treated as shared by everyone splitting
+  /// the bill — the common case for rice, bread and anything else in the
+  /// middle of the table.
+  final Map<int, Set<String>> _itemAssignments = {};
+
+  /// Whether to divide the bill by item rather than evenly. Only offered when
+  /// the scan produced items that add up.
+  bool _splitByItem = false;
+
   bool _isSaving = false;
 
   /// Fields the user has corrected. Once touched, a field stops being flagged
@@ -81,12 +95,22 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     _date = data.date.value ?? DateTime.now();
     _category = data.category.value ?? 'Food & drink';
 
+    _items = List.of(data.items);
+
     final state = context.read<StateManager>();
     _paidById = state.currentUserId;
     for (final id in _memberIdsFor(state)) {
       _splitWith[id] = true;
     }
   }
+
+  /// Whether splitting by item is worth offering.
+  ///
+  /// Only when the items reconcile with the total. Items that do not add up
+  /// have rows missing or double-counted, and dividing by them would put real
+  /// money in the wrong place — the kind of error nobody notices until they
+  /// settle up. Offering an even split there is the honest option.
+  bool get _canSplitByItem => widget.data.itemsReconcile && _items.isNotEmpty;
 
   List<String> _memberIdsFor(StateManager state) {
     final group = state.groups.where((g) => g.id == widget.groupId).firstOrNull;
@@ -166,16 +190,23 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     final description = merchant.isEmpty ? _category : merchant;
 
     try {
+      // By item the shares are uneven by design, so they are stored as exact
+      // amounts rather than as an even division.
+      final byItem = _splitByItem && _canSplitByItem;
       final result = await state.saveExpense(
         description: description,
         amount: _amount,
         paidById: _paidById!,
-        splitType: SplitType.equal,
+        splitType: byItem ? SplitType.exact : SplitType.equal,
         participants: participants,
-        splits: _equalSplits(_amount, participants),
+        splits: byItem
+            ? _itemSplits(_amount, participants)
+            : _equalSplits(_amount, participants),
         groupId: widget.groupId,
         date: _date,
-        notes: 'Added from a scanned receipt',
+        notes: byItem
+            ? 'Added from a scanned receipt · split by item'
+            : 'Added from a scanned receipt',
       );
 
       if (!mounted) return;
@@ -203,6 +234,115 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
       setState(() => _isSaving = false);
       showAppSnack(context, 'Could not save: $e', success: false);
     }
+  }
+
+  /// Drops a misread row. The bill's total is left alone — it was read
+  /// separately and is what the restaurant actually charged, so removing a
+  /// stray row should not silently change what everyone owes.
+  void _removeItem(int index) {
+    setState(() {
+      _items.removeAt(index);
+      // Assignments are keyed by position, so they have to shift down with
+      // the items they belong to.
+      final shifted = <int, Set<String>>{};
+      _itemAssignments.forEach((i, who) {
+        if (i < index) {
+          shifted[i] = who;
+        } else if (i > index) {
+          shifted[i - 1] = who;
+        }
+      });
+      _itemAssignments
+        ..clear()
+        ..addAll(shifted);
+    });
+  }
+
+  /// Marks that someone did or did not have a given item.
+  void _toggleAssignment(int index, String memberId) {
+    setState(() {
+      final who = _itemAssignments.putIfAbsent(index, () => <String>{});
+      if (!who.remove(memberId)) who.add(memberId);
+      if (who.isEmpty) _itemAssignments.remove(index);
+    });
+  }
+
+  /// Splits the bill by who had what.
+  ///
+  /// Each item's cost goes to the people assigned to it, divided evenly among
+  /// them; an item with nobody assigned is shared by everyone, which is what
+  /// the shared dishes in the middle of the table actually are.
+  ///
+  /// The bill's total is usually more than the items add up to, because tax
+  /// and service are added at the foot. That difference is spread in
+  /// proportion to what each person ate, so the person who ordered the most
+  /// carries the most tax — the same answer as splitting each summary line
+  /// pro rata, without needing to read those lines correctly.
+  ///
+  /// Returns shares that sum to [total] exactly.
+  Map<String, double> _itemSplits(double total, List<String> members) {
+    if (members.isEmpty) return {};
+
+    final memberSet = members.toSet();
+    // Work in paise: money divided into thirds does not survive as doubles,
+    // and this has to add back up to the paisa.
+    final owed = {for (final m in members) m: 0};
+
+    var assignedPaise = 0;
+    for (var i = 0; i < _items.length; i++) {
+      // Only people actually splitting this bill can be charged for an item.
+      final assigned = (_itemAssignments[i] ?? const <String>{})
+          .where(memberSet.contains)
+          .toList();
+      final eaters = assigned.isEmpty ? members : assigned;
+
+      final itemPaise = (_items[i].lineTotal * 100).round();
+      final each = itemPaise ~/ eaters.length;
+      var remainder = itemPaise - each * eaters.length;
+
+      for (final m in eaters) {
+        // The odd paise go to the first few eaters. Deterministic, so the
+        // same bill always splits the same way.
+        owed[m] = owed[m]! + each + (remainder > 0 ? 1 : 0);
+        if (remainder > 0) remainder--;
+      }
+      assignedPaise += itemPaise;
+    }
+
+    // Tax, service and anything else the items did not cover, shared in
+    // proportion to each person's share of the items.
+    final totalPaise = (total * 100).round();
+    final extraPaise = totalPaise - assignedPaise;
+    if (extraPaise != 0 && assignedPaise > 0) {
+      var distributed = 0;
+      final ordered = members.toList();
+      for (final m in ordered) {
+        final share = (extraPaise * owed[m]!) ~/ assignedPaise;
+        owed[m] = owed[m]! + share;
+        distributed += share;
+      }
+      // Integer division leaves a few paise over; give them to the largest
+      // shares first so the rounding follows the money.
+      var leftover = extraPaise - distributed;
+      ordered.sort((a, b) => owed[b]!.compareTo(owed[a]!));
+      for (var i = 0; leftover > 0 && ordered.isNotEmpty; i++, leftover--) {
+        owed[ordered[i % ordered.length]] =
+            owed[ordered[i % ordered.length]]! + 1;
+      }
+    }
+
+    // Guard the invariant: whatever the arithmetic above did, the shares must
+    // add up to the bill. Any residue lands on the payer, who is the person
+    // best placed to notice it.
+    final sum = owed.values.fold<int>(0, (a, b) => a + b);
+    final drift = totalPaise - sum;
+    if (drift != 0) {
+      final absorber =
+          members.contains(_paidById) ? _paidById! : members.first;
+      owed[absorber] = owed[absorber]! + drift;
+    }
+
+    return {for (final e in owed.entries) e.key: e.value / 100};
   }
 
   /// Even split where the last person absorbs the rounding, so the shares add
@@ -358,6 +498,19 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
                 ),
                 const SizedBox(height: AppSpacing.lg),
 
+                if (_items.isNotEmpty) ...[
+                  SectionHeader(title: 'Items on the bill (${_items.length})'),
+                  _ItemsCard(
+                    items: _items,
+                    itemsTotal: widget.data.itemsTotal,
+                    billTotal: _amount,
+                    reconciles: widget.data.itemsReconcile,
+                    currencySymbol: symbol,
+                    onRemove: _removeItem,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                ],
+
                 const SectionHeader(title: 'Paid by · Split between'),
                 _PayerRow(
                   members: members,
@@ -365,6 +518,14 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
                   onChanged: (id) => setState(() => _paidById = id),
                 ),
                 const SizedBox(height: AppSpacing.sm),
+
+                if (_canSplitByItem) ...[
+                  _SplitModeToggle(
+                    byItem: _splitByItem,
+                    onChanged: (v) => setState(() => _splitByItem = v),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
 
                 _SplitSummary(
                   members: members,
@@ -374,6 +535,27 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
                   onToggle: (id, value) =>
                       setState(() => _splitWith[id] = value),
                 ),
+
+                // Who had what. Shown only when dividing by item, since it is
+                // a lot of controls to put in front of someone splitting evenly.
+                if (_splitByItem && _canSplitByItem) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _AssignmentList(
+                    items: _items,
+                    members: members
+                        .where((m) => _splitWith[m.id] ?? false)
+                        .toList(),
+                    assignments: _itemAssignments,
+                    currencySymbol: symbol,
+                    onToggle: _toggleAssignment,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  _PerPersonSummary(
+                    splits: _itemSplits(_amount, _selectedIds),
+                    members: members,
+                    currencySymbol: symbol,
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.xl),
 
                 Row(
@@ -794,6 +976,476 @@ class _SplitSummary extends StatelessWidget {
                       ? AppColors.textPrimary
                       : AppColors.muted,
                 ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The bill's line items, with a running check that they add up.
+///
+/// The reconciliation line is the point of this card. A scan that reads eight
+/// of nine dishes looks perfectly plausible row by row; only the sum gives it
+/// away, which is why the comparison against the bill's own total is shown
+/// rather than left for the user to do in their head.
+class _ItemsCard extends StatelessWidget {
+  final List<ReceiptItem> items;
+  final double itemsTotal;
+  final double billTotal;
+  final bool reconciles;
+  final String currencySymbol;
+  final void Function(int index) onRemove;
+
+  const _ItemsCard({
+    required this.items,
+    required this.itemsTotal,
+    required this.billTotal,
+    required this.reconciles,
+    required this.currencySymbol,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Compare against what the user currently has in the amount box, not the
+    // scanned total: if they corrected the total, that is the number the items
+    // now have to agree with.
+    final difference = billTotal - itemsTotal;
+    final agrees = reconciles && difference.abs() <= billTotal * 0.2;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < items.length; i++)
+            _ItemRow(
+              item: items[i],
+              currencySymbol: currencySymbol,
+              isLast: i == items.length - 1,
+              onRemove: () => onRemove(i),
+            ),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: agrees ? AppColors.successLight : AppColors.warningLight,
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(AppRadius.lg),
+              ),
+              border: Border(
+                top: BorderSide(
+                  color: agrees
+                      ? AppColors.successBorder
+                      : AppColors.primaryBorder,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  agrees
+                      ? Icons.check_circle_rounded
+                      : Icons.info_outline_rounded,
+                  size: 16,
+                  color: agrees ? AppColors.success : AppColors.warning,
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    agrees
+                        ? 'Items add up to ${formatMoney(itemsTotal, symbol: currencySymbol)} of the ${formatMoney(billTotal, symbol: currencySymbol)} bill.'
+                        : 'Items add up to ${formatMoney(itemsTotal, symbol: currencySymbol)}, but the bill says ${formatMoney(billTotal, symbol: currencySymbol)}. A row may have been missed.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                      color: agrees ? AppColors.success : AppColors.warning,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One item: what it was, how many, and what it cost.
+class _ItemRow extends StatelessWidget {
+  final ReceiptItem item;
+  final String currencySymbol;
+  final bool isLast;
+  final VoidCallback onRemove;
+
+  const _ItemRow({
+    required this.item,
+    required this.currencySymbol,
+    required this.isLast,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : const Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        children: [
+          if (item.quantity > 1)
+            Container(
+              margin: const EdgeInsets.only(right: AppSpacing.xs),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.primarySurface,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Text(
+                '${item.quantity}x',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          Expanded(
+            child: Text(
+              item.name,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          Text(
+            formatMoney(item.lineTotal, symbol: currencySymbol),
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          IconButton(
+            onPressed: onRemove,
+            icon: const Icon(Icons.close_rounded, size: 16),
+            color: AppColors.muted,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            padding: EdgeInsets.zero,
+            tooltip: 'Remove ${item.name}',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Chooses between splitting the bill evenly and splitting it by item.
+class _SplitModeToggle extends StatelessWidget {
+  final bool byItem;
+  final ValueChanged<bool> onChanged;
+
+  const _SplitModeToggle({required this.byItem, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ModeButton(
+            label: 'Split evenly',
+            icon: Icons.balance_rounded,
+            selected: !byItem,
+            onTap: () => onChanged(false),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          child: _ModeButton(
+            label: 'Split by item',
+            icon: Icons.restaurant_menu_rounded,
+            selected: byItem,
+            onTap: () => onChanged(true),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ModeButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ModeButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primarySurface : Colors.white,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+            color: selected ? AppColors.primaryBorder : AppColors.border,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: selected ? AppColors.textPrimary : AppColors.muted,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                color: selected ? AppColors.textPrimary : AppColors.muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Who had what: one row per item, with a chip per person.
+///
+/// Leaving an item unassigned means everyone shares it, which matches how
+/// shared dishes actually work and saves tapping every name on the rice.
+class _AssignmentList extends StatelessWidget {
+  final List<ReceiptItem> items;
+  final List<Member> members;
+  final Map<int, Set<String>> assignments;
+  final String currencySymbol;
+  final void Function(int index, String memberId) onToggle;
+
+  const _AssignmentList({
+    required this.items,
+    required this.members,
+    required this.assignments,
+    required this.currencySymbol,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (members.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: AppSpacing.xs),
+          child: Text(
+            'Tap who had each item. Anything left untapped is shared by everyone.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              color: AppColors.muted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        for (var i = 0; i < items.length; i++)
+          Container(
+            margin: const EdgeInsets.only(bottom: AppSpacing.xs),
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        items[i].quantity > 1
+                            ? '${items[i].quantity}x ${items[i].name}'
+                            : items[i].name,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      formatMoney(items[i].lineTotal, symbol: currencySymbol),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    for (final m in members)
+                      _PersonChip(
+                        label: m.name,
+                        selected: assignments[i]?.contains(m.id) ?? false,
+                        onTap: () => onToggle(i, m.id),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _PersonChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PersonChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: 6,
+        ),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primarySurface : Colors.white,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(
+            color: selected ? AppColors.primaryBorder : AppColors.border,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            color: selected ? AppColors.textPrimary : AppColors.muted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What each person ends up owing once the items are divided — the number that
+/// actually lands in the ledger, shown before it is saved rather than after.
+class _PerPersonSummary extends StatelessWidget {
+  final Map<String, double> splits;
+  final List<Member> members;
+  final String currencySymbol;
+
+  const _PerPersonSummary({
+    required this.splits,
+    required this.members,
+    required this.currencySymbol,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final owing = members.where((m) => splits.containsKey(m.id)).toList();
+    if (owing.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.primarySurface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.primaryBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Each person owes',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          for (final m in owing)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      m.name,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    // Decimals here, unlike elsewhere in the app: these are
+                    // the exact amounts that go into the ledger, and rounding
+                    // three shares of a 100 bill to whole rupees would show
+                    // 99 and look like the split had lost money.
+                    formatMoney(
+                      splits[m.id] ?? 0,
+                      symbol: currencySymbol,
+                      decimals: true,
+                    ),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
               ),
             ),
         ],
