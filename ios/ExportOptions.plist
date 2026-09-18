@@ -9,9 +9,19 @@
 	<key>teamID</key>
 	<string>G722HBHSC4</string>
 
-	<!-- Let Xcode manage the signing assets during export. -->
+	<!-- Manual: the cert and profile are imported by the workflow, so
+	     Xcode must not try to fetch its own during export. -->
 	<key>signingStyle</key>
-	<string>automatic</string>
+	<string>manual</string>
+
+	<key>signingCertificate</key>
+	<string>Apple Distribution</string>
+
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.bondbyte.paisasplit</key>
+		<string>PaisaSplit App Store</string>
+	</dict>
 
 	<key>uploadSymbols</key>
 	<true/>
