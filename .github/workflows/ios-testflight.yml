@@ -11,12 +11,33 @@ on:
 jobs:
   build:
     name: Build and upload to TestFlight
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          set -eo pipefail
+          ls /Applications | grep -i "^Xcode" || true
+          # Pick the newest Xcode 26+ present; the runner image may ship
+          # 26.0, 26.1 or later, so do not hardcode a point release.
+          XC="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$XC" ]; then
+            echo "No Xcode 26+ on this runner image"; exit 1
+          fi
+          echo "Selecting $XC"
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+          # Fail loudly here rather than 20 minutes later at upload.
+          SDK_VER="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iOS SDK: $SDK_VER"
+          case "$SDK_VER" in
+            2[6-9].*|[3-9][0-9].*) echo "SDK OK" ;;
+            *) echo "SDK $SDK_VER is too old; App Store requires 26+"; exit 1 ;;
+          esac
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
