@@ -89,10 +89,6 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="PaisaSplit App Store" \
-            DEVELOPMENT_TEAM=G722HBHSC4 \
             archive
 
       - name: Export IPA
