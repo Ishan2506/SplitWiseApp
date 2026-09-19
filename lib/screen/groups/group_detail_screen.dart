@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../model/group_model.dart';
+import '../../models/models.dart';
 import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
@@ -37,7 +38,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       context.read<GroupProvider>().refreshGroup(widget.groupId);
       context.read<StateManager>().loadGroupExpenses(widget.groupId);
     });
-  }
+  } 
 
   Future<void> _confirmDelete(GroupModel group) async {
     final confirmed = await showDialog<bool>(
@@ -98,10 +99,18 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       );
     }
 
-    final currentUserId = context.read<StateManager>().currentUserId;
+    // Watched, not read: the expense list below arrives after the first build.
+    final state = context.watch<StateManager>();
+    final currentUserId = state.currentUserId;
     final isCreator = group.isCreatedBy(currentUserId);
     final balances = provider.balancesFor(group.id);
     final userBalance = balances.balanceFor(currentUserId);
+
+    // Newest first, and only this group's.
+    final groupExpenses = state.expenses
+        .where((e) => e.groupId == group.id)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
 
     return Scaffold(
       appBar: AppBar(
@@ -254,6 +263,21 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     balances: balances,
                     currentUserId: currentUserId,
                     currencySymbol: group.currencySymbol,
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+
+                  SectionHeader(
+                    title: 'Recent expenses',
+                    subtitle: groupExpenses.isEmpty
+                        ? null
+                        : '${groupExpenses.length} expense'
+                            '${groupExpenses.length == 1 ? '' : 's'} · '
+                            '${formatMoney(groupExpenses.fold<double>(0, (sum, e) => sum + e.amount), symbol: group.currencySymbol)} total',
+                  ),
+                  _GroupExpenseList(
+                    expenses: groupExpenses,
+                    group: group,
+                    currentUserId: currentUserId,
                   ),
                 ],
               ),
@@ -750,6 +774,101 @@ class _SettlementRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// This group's expenses, newest first.
+class _GroupExpenseList extends StatelessWidget {
+  final List<Expense> expenses;
+  final GroupModel group;
+  final String currentUserId;
+
+  const _GroupExpenseList({
+    required this.expenses,
+    required this.group,
+    required this.currentUserId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (expenses.isEmpty) {
+      return PSCard(
+        child: Row(
+          children: [
+            const Icon(Icons.receipt_long_outlined,
+                size: 19, color: AppColors.muted),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Text(
+                'No expenses in this group yet.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (final expense in expenses) ...[
+          _GroupExpenseRow(
+            expense: expense,
+            group: group,
+            currentUserId: currentUserId,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+        ],
+      ],
+    );
+  }
+}
+
+class _GroupExpenseRow extends StatelessWidget {
+  final Expense expense;
+  final GroupModel group;
+  final String currentUserId;
+
+  const _GroupExpenseRow({
+    required this.expense,
+    required this.group,
+    required this.currentUserId,
+  });
+
+  static const _months = [
+    'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+    'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'
+  ];
+
+  /// Payer names come from the group's own roster, which is already loaded
+  /// here, rather than the global member list.
+  String _payerName() {
+    for (final m in group.members) {
+      if (m.id == expense.paidById) return m.name;
+    }
+    return 'Someone';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final symbol = group.currencySymbol;
+    final share = expense.splits[currentUserId] ?? 0;
+    final paidByMe = expense.paidById == currentUserId;
+
+    // If you paid, you are owed everyone else's share; otherwise you owe yours.
+    final youLabel = paidByMe ? 'you lent' : 'your share';
+    final youAmount = paidByMe ? expense.amount - share : share;
+
+    return ExpenseItem(
+      title: expense.description,
+      subtitle: '${paidByMe ? 'You' : _payerName()} paid',
+      amount: formatMoney(expense.amount, symbol: symbol),
+      day: expense.date.day.toString().padLeft(2, '0'),
+      month: _months[expense.date.month - 1],
+      trailingLabel: youAmount.abs() < 0.01
+          ? 'not involved'
+          : '$youLabel ${formatMoney(youAmount, symbol: symbol)}',
     );
   }
 }
