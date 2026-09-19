@@ -13,7 +13,7 @@ import '../../widgets/common_widgets.dart';
 import 'group_widgets.dart';
 
 /// Everything needed to get someone into a group: a scannable QR code, a
-/// shareable link, the raw code to read out, and invites by email or mobile.
+/// shareable link, the raw code to read out, and invites by email.
 class InviteScreen extends StatefulWidget {
   final String groupId;
 
@@ -126,20 +126,15 @@ class _InviteScreenState extends State<InviteScreen> {
     final raw = _contactController.text.trim();
     if (raw.isEmpty) return;
 
-    final isEmail = raw.contains('@');
-    final isMobile = RegExp(r'^[6-9]\d{9}$').hasMatch(raw);
-    if (!isEmail && !isMobile) {
-      showGroupSnack(
-          context, 'Enter an email address or a 10-digit mobile number',
-          success: false);
+    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(raw)) {
+      showGroupSnack(context, 'Enter a valid email address', success: false);
       return;
     }
 
     setState(() => _sendingInvite = true);
-    final result = await context.read<GroupProvider>().inviteByContact(
+    final result = await context.read<GroupProvider>().inviteByEmail(
           groupId: group.id,
-          email: isEmail ? raw : null,
-          mobileNumber: isEmail ? null : raw,
+          email: raw,
         );
     if (!mounted) return;
     setState(() => _sendingInvite = false);
@@ -243,8 +238,8 @@ class _InviteScreenState extends State<InviteScreen> {
                 const SizedBox(height: AppSpacing.xl),
 
                 const SectionHeader(
-                  title: 'Invite by email or mobile',
-                  subtitle: 'We will send them a link to join',
+                  title: 'Invite by email',
+                  subtitle: 'We will email them a link and the invite code',
                 ),
                 _ContactInvite(
                   controller: _contactController,
@@ -535,10 +530,11 @@ class _ContactInvite extends StatelessWidget {
       children: [
         Expanded(
           child: PSTextField(
-            label: 'Contact',
+            label: 'Email',
             showLabel: false,
-            placeholder: 'Email or 10-digit mobile',
+            placeholder: 'name@example.com',
             controller: controller,
+            keyboardType: TextInputType.emailAddress,
             enabled: !sending,
             textInputAction: TextInputAction.send,
           ),

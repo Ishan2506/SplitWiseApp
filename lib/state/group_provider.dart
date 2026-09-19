@@ -212,15 +212,13 @@ class GroupProvider extends ChangeNotifier {
     return result;
   }
 
-  Future<Map<String, dynamic>> inviteByContact({
+  Future<Map<String, dynamic>> inviteByEmail({
     required String groupId,
-    String? email,
-    String? mobileNumber,
+    required String email,
   }) async {
     final result = await ApiService.inviteToGroup(
       groupId: groupId,
       email: email,
-      mobileNumber: mobileNumber,
     );
     if (result['success'] == true && result['group'] != null) {
       _upsert(result['group'] as GroupModel);
