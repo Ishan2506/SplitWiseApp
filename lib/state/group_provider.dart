@@ -41,6 +41,24 @@ class GroupProvider extends ChangeNotifier {
   double userBalanceIn(String groupId, String userId) =>
       balancesFor(groupId).balanceFor(userId);
 
+  /// Total the user is owed across every loaded group, and the total they owe.
+  /// These sum the same per-group balances the group cards show, so the
+  /// dashboard headline can never disagree with the list beneath it.
+  double totalOwedAcrossGroups(String userId) =>
+      _sumBalances(userId, positive: true);
+
+  double totalOweAcrossGroups(String userId) =>
+      _sumBalances(userId, positive: false);
+
+  double _sumBalances(String userId, {required bool positive}) {
+    double total = 0.0;
+    for (final g in _groups) {
+      final bal = userBalanceIn(g.id, userId);
+      if (positive ? bal > 0.01 : bal < -0.01) total += bal.abs();
+    }
+    return total;
+  }
+
   /// Groups of one kind, for the type filter chips.
   List<GroupModel> groupsOfType(GroupType type) =>
       _groups.where((g) => g.type == type).toList();

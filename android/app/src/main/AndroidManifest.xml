@@ -35,12 +35,15 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- splitwise://join/<CODE> — invite links shared from the app. -->
+            <!-- paisasplit://join/<CODE> — invite links shared from the app.
+                 The scheme must stay unique to this app: the generic
+                 "splitwise" is claimed by the Splitwise app, so a link using
+                 it can open that app instead of this one. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="splitwise" android:host="join"/>
+                <data android:scheme="paisasplit" android:host="join"/>
             </intent-filter>
 
             <!-- http://<dev-server>/join/<CODE> — the link behind every group
@@ -57,8 +60,8 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="http"
-                      android:host="192.168.31.106"
-                      android:port="5000"
+                      android:host="103.212.121.139"
+                      android:port="7000"
                       android:pathPrefix="/join"/>
             </intent-filter>
         </activity>

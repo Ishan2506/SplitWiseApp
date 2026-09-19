@@ -51,15 +51,18 @@
 	<!-- Choosing a group photo. -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Splitwise needs access to your photos so you can upload a receipt or set a group photo.</string>
-	<!-- splitwise://join/<CODE> — invite links shared from the app. -->
+	<!-- paisasplit://join/<CODE> — invite links shared from the app.
+	     The scheme must stay unique to this app: the generic "splitwise" is
+	     claimed by the Splitwise app, and iOS hands the link to whichever
+	     app it pleases when two claim the same scheme. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.splitwise.invite</string>
+			<string>in.bondbyte.paisasplit.invite</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>splitwise</string>
+				<string>paisasplit</string>
 			</array>
 		</dict>
 	</array>
