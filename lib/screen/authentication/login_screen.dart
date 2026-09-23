@@ -1,5 +1,5 @@
-import 'dart:io' show Platform;
-
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../state/state_manager.dart';
@@ -186,8 +186,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               // Google sign-in is Android-only; iOS signs in with email or
               // phone alone. The divider goes with it, since it exists only to
-              // separate the two methods.
-              if (!Platform.isIOS) ...[
+              // separate the two methods. `dart:io`'s Platform throws on
+              // web, so this checks the target platform instead — which
+              // also means web (not truly iOS) correctly shows the button.
+              if (!(!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS)) ...[
                 const SizedBox(height: AppSpacing.md),
                 const AuthDivider(),
                 const SizedBox(height: AppSpacing.md),

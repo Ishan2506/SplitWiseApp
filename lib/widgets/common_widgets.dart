@@ -344,8 +344,16 @@ class PSButton extends StatelessWidget {
         foregroundColor: WidgetStateProperty.resolveWith((states) =>
             states.contains(WidgetState.disabled) ? AppColors.muted : fg),
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-        minimumSize: WidgetStatePropertyAll(Size(expand ? 0 : 0, _height)),
-        fixedSize: WidgetStatePropertyAll(Size.fromHeight(_height)),
+        // `fixedSize` only applies when the button should fill its parent —
+        // `Size.fromHeight` sets width to double.infinity, which is exactly
+        // right for that case but overflows a narrow row (e.g. dialog
+        // actions) when `expand` is false. There, min/max alone fixes the
+        // height and leaves the width to the button's own content.
+        minimumSize: WidgetStatePropertyAll(Size(0, _height)),
+        maximumSize: WidgetStatePropertyAll(Size(double.infinity, _height)),
+        fixedSize: expand
+            ? WidgetStatePropertyAll(Size.fromHeight(_height))
+            : null,
         padding: WidgetStatePropertyAll(
           EdgeInsets.symmetric(
               horizontal: size == PSButtonSize.small ? 16 : 24),

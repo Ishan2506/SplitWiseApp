@@ -41,13 +41,20 @@ class Group {
 
 class Expense {
   final String id;
+
+  /// What this expense was for, specifically — "Tea", "Cab to airport". Free
+  /// text the user types, distinct from [category].
   final String description;
+
+  /// The broad kind of spend this falls under — "Food & drink", "Travel".
+  final String category;
   final double amount;
   final DateTime date;
   final String paidById;
   final SplitType splitType;
   final Map<String, double> splits; // memberId -> split value (amount/percent)
   final String? groupId; // null if individual expense
+  final String? notes;
 
   Expense({
     required this.id,
@@ -57,7 +64,9 @@ class Expense {
     required this.paidById,
     required this.splitType,
     required this.splits,
+    this.category = 'Other',
     this.groupId,
+    this.notes,
   });
 
   /// Builds an expense from the server payload.
@@ -82,6 +91,9 @@ class Expense {
     return Expense(
       id: idOf(json['_id'] ?? json['id']),
       description: (json['description'] ?? '').toString(),
+      category: (json['category'] as String?)?.isEmpty ?? true
+          ? 'Other'
+          : json['category'] as String,
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
       date: DateTime.tryParse((json['date'] ?? '').toString())?.toLocal() ??
           DateTime.now(),
@@ -89,6 +101,9 @@ class Expense {
       splitType: _splitTypeFrom(json['splitType']),
       splits: splits,
       groupId: idOf(json['group']).isEmpty ? null : idOf(json['group']),
+      notes: (json['notes'] as String?)?.isEmpty ?? true
+          ? null
+          : json['notes'] as String,
     );
   }
 

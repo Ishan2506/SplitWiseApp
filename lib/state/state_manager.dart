@@ -409,6 +409,7 @@ class StateManager extends ChangeNotifier {
     required SplitType splitType,
     required List<String> participants,
     required Map<String, double> splits,
+    String? category,
     Map<String, double>? values,
     String? groupId,
     DateTime? date,
@@ -418,6 +419,7 @@ class StateManager extends ChangeNotifier {
       addExpense(Expense(
         id: 'local-${DateTime.now().millisecondsSinceEpoch}',
         description: description,
+        category: category ?? 'Other',
         amount: amount,
         date: date ?? DateTime.now(),
         paidById: paidById,
@@ -430,6 +432,7 @@ class StateManager extends ChangeNotifier {
     final result = await ApiService.createExpense(
       groupId: groupId,
       description: description,
+      category: category,
       amount: amount,
       paidBy: paidById,
       participants: participants,
@@ -449,6 +452,72 @@ class StateManager extends ChangeNotifier {
       'success': false,
       'message': result['message'] ?? 'Could not save the expense',
       if (result['limitExceeded'] == true) 'limitExceeded': true,
+    };
+  }
+
+  /// Updates an existing expense on the server and refreshes the local copy.
+  ///
+  /// Same authority rule as [saveExpense]: the server recomputes the splits
+  /// from [participants]/[values] and the resolved amounts in its response
+  /// replace the stored copy, rather than anything computed here.
+  Future<Map<String, dynamic>> updateExpense({
+    required String expenseId,
+    required String description,
+    required double amount,
+    required String paidById,
+    required SplitType splitType,
+    required List<String> participants,
+    String? category,
+    Map<String, double>? values,
+    DateTime? date,
+    String? notes,
+  }) async {
+    final result = await ApiService.updateExpense(
+      expenseId: expenseId,
+      description: description,
+      category: category,
+      amount: amount,
+      paidBy: paidById,
+      participants: participants,
+      splitType: Expense.splitTypeToApi(splitType),
+      values: values,
+      date: date,
+      notes: notes,
+    );
+
+    if (result['success'] == true && result['expense'] != null) {
+      final updated = Expense.fromJson(
+          Map<String, dynamic>.from(result['expense'] as Map));
+      final index = _expenses.indexWhere((e) => e.id == expenseId);
+      if (index >= 0) {
+        _expenses[index] = updated;
+      } else {
+        _expenses.add(updated);
+      }
+      notifyListeners();
+      return {'success': true};
+    }
+
+    return {
+      'success': false,
+      'message': result['message'] ?? 'Could not update the expense',
+      if (result['limitExceeded'] == true) 'limitExceeded': true,
+    };
+  }
+
+  /// Deletes an expense from the server and drops it from the local copy.
+  Future<Map<String, dynamic>> deleteExpense(String expenseId) async {
+    final result = await ApiService.deleteExpense(expenseId);
+
+    if (result['success'] == true) {
+      _expenses.removeWhere((e) => e.id == expenseId);
+      notifyListeners();
+      return {'success': true};
+    }
+
+    return {
+      'success': false,
+      'message': result['message'] ?? 'Could not delete the expense',
     };
   }
 

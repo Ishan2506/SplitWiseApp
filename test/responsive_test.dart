@@ -21,6 +21,7 @@ import 'package:splitwise_app/screen/groups/settle_up_screen.dart';
 import 'package:splitwise_app/screen/groups/who_owes_whom_screen.dart';
 import 'package:splitwise_app/screen/receipt/receipt_review_screen.dart';
 import 'package:splitwise_app/utils/receipt_parser.dart';
+import 'package:splitwise_app/widgets/common_widgets.dart';
 
 /// Widths worth guarding: a small phone, a common phone, a tablet, a desktop.
 const _widths = [
@@ -124,4 +125,58 @@ void main() {
       }
     });
   }
+
+  // Regression for a real overflow: PSButton's `fixedSize` used to be set to
+  // `Size.fromHeight(_height)` unconditionally — which fixes width to
+  // double.infinity — even when `expand: false`. That is harmless full width
+  // for the app's usual buttons, but every dialog's "Cancel / Delete" row
+  // (group delete, expense delete, invite code rotation) puts a small,
+  // non-expanding PSButton next to another action inside a width that is
+  // only ever as wide as the dialog, and infinity-width there squeezed the
+  // sibling into a few px and overflowed.
+  testWidgets('a small, non-expanding PSButton fits beside another action '
+      'in a narrow row', (tester) async {
+    addTearDown(tester.view.reset);
+
+    for (final size in _widths) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme(),
+          home: Scaffold(
+            body: Center(
+              child: AlertDialog(
+                title: const Text('Delete this group?'),
+                content: const Text(
+                  'Every expense and settlement in this group will be '
+                  'deleted too. This cannot be undone.',
+                ),
+                actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                actions: [
+                  TextButton(onPressed: () {}, child: const Text('Cancel')),
+                  PSButton(
+                    label: 'Delete',
+                    variant: PSButtonVariant.danger,
+                    size: PSButtonSize.small,
+                    expand: false,
+                    onPressed: () {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      tester.takeException();
+
+      expect(
+        _overflows(tester),
+        isEmpty,
+        reason: 'delete dialog actions at ${size.width.toInt()}px wide',
+      );
+    }
+  });
 }

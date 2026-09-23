@@ -11,7 +11,7 @@ class ApiService {
   // Physical Android phone: use the PC's LAN IP (phone + PC on same Wi-Fi).
   // Emulator would use 10.0.2.2; web/desktop uses localhost.
   static const String _defaultBaseUrl = kIsWeb
-      ? 'http://103.212.121.139:7000/api' //http://localhost:5000/api
+      ? 'http://localhost:9856/api' //http://localhost:5000/api
       : 'http://103.212.121.139:7000/api';
 
   /// Points the client at a different host. Tests set this to a local stub
@@ -859,6 +859,7 @@ class ApiService {
     required double amount,
     required String paidBy,
     required List<String> participants,
+    String? category,
     String splitType = 'equal',
     Map<String, double>? values,
     DateTime? date,
@@ -870,6 +871,7 @@ class ApiService {
           headers: _getHeaders(),
           body: jsonEncode({
             'description': description,
+            'category': ?category,
             'amount': amount,
             'paidBy': paidBy,
             'splitType': splitType,
@@ -906,6 +908,7 @@ class ApiService {
   static Future<Map<String, dynamic>> updateExpense({
     required String expenseId,
     String? description,
+    String? category,
     double? amount,
     String? paidBy,
     List<String>? participants,
@@ -920,6 +923,7 @@ class ApiService {
           headers: _getHeaders(),
           body: jsonEncode({
             'description': ?description,
+            'category': ?category,
             'amount': ?amount,
             'paidBy': ?paidBy,
             'participants': ?participants,

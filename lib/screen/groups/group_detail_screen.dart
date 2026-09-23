@@ -10,6 +10,7 @@ import '../../utils/app_constants.dart';
 import '../../widgets/common_widgets.dart';
 import '../../network/receipt_scanner.dart';
 import '../add_expense_screen.dart';
+import '../expense_detail_screen.dart';
 import '../receipt/receipt_scan_screen.dart';
 import 'create_group_screen.dart';
 import 'group_members_screen.dart';
@@ -862,13 +863,23 @@ class _GroupExpenseRow extends StatelessWidget {
 
     return ExpenseItem(
       title: expense.description,
-      subtitle: '${paidByMe ? 'You' : _payerName()} paid',
+      subtitle:
+          '${expense.category} · ${paidByMe ? 'You' : _payerName()} paid',
       amount: formatMoney(expense.amount, symbol: symbol),
       day: expense.date.day.toString().padLeft(2, '0'),
       month: _months[expense.date.month - 1],
       trailingLabel: youAmount.abs() < 0.01
           ? 'not involved'
           : '$youLabel ${formatMoney(youAmount, symbol: symbol)}',
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ExpenseDetailScreen(
+            expenseId: expense.id,
+            groupId: group.id,
+          ),
+        ),
+      ),
     );
   }
 }

@@ -59,7 +59,18 @@ class AddExpenseScreen extends StatefulWidget {
   /// The group the expense belongs to. Expenses are always recorded against a
   /// group, so this is required rather than chosen inside the form.
   final String groupId;
-  const AddExpenseScreen({super.key, required this.groupId});
+
+  /// When set, the form opens pre-filled with this expense's data and
+  /// "Save" updates it in place instead of creating a new one.
+  final Expense? existingExpense;
+
+  const AddExpenseScreen({
+    super.key,
+    required this.groupId,
+    this.existingExpense,
+  });
+
+  bool get isEditing => existingExpense != null;
 
   @override
   State<AddExpenseScreen> createState() => _AddExpenseScreenState();
@@ -68,6 +79,7 @@ class AddExpenseScreen extends StatefulWidget {
 class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
+  final _titleController = TextEditingController();
   final _notesController = TextEditingController();
 
   String? _paidById;
@@ -99,8 +111,49 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   void initState() {
     super.initState();
     final state = Provider.of<StateManager>(context, listen: false);
-    _paidById = state.currentUserId;
+    final existing = widget.existingExpense;
+
+    if (existing != null) {
+      _amountController.text = existing.amount.toStringAsFixed(2);
+      _titleController.text = existing.description;
+      _notesController.text = existing.notes ?? '';
+      _selectedCategory =
+          _categories.containsKey(existing.category) ? existing.category : 'Other';
+      _selectedDate = existing.date;
+      _splitType = existing.splitType;
+      _paidById = existing.paidById;
+    } else {
+      _paidById = state.currentUserId;
+    }
+
     _updateSelectedMembersForGroup(state);
+
+    if (existing != null) _applyExistingSplits(existing);
+  }
+
+  /// Prefills who is in the split and each person's figure from a previously
+  /// saved expense, overriding the even-split default that
+  /// [_updateSelectedMembersForGroup] seeds every field with.
+  void _applyExistingSplits(Expense existing) {
+    for (final id in _splitMembersSelected.keys.toList()) {
+      _splitMembersSelected[id] = existing.splits.containsKey(id);
+    }
+
+    _seedingCustomFields = true;
+    for (final entry in existing.splits.entries) {
+      final field = _customAmountControllers[entry.key];
+      if (field == null) continue;
+      field.text = _splitType == SplitType.percentage
+          ? (existing.amount > 0
+              ? (entry.value / existing.amount * 100).toStringAsFixed(2)
+              : '')
+          : entry.value.toStringAsFixed(2);
+    }
+    _seedingCustomFields = false;
+
+    // These are the expense's real saved shares, not a guess — stop the
+    // even-split auto-fill from overwriting them on the next rebuild.
+    _customFieldsTouched = true;
   }
 
   /// An expense is always in its group's currency. The server-backed group
@@ -241,33 +294,51 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     // Read before awaiting — this touches context, which may be gone after.
     final symbol = _symbol;
 
-    // The category doubles as the expense's label.
-    final description = _selectedCategory;
+    final description = _titleController.text.trim();
+
+    // The server recomputes the splits from these, so an exact or percentage
+    // expense is validated in one place rather than two.
+    final values = _splitType == SplitType.equal
+        ? null
+        : _customValues(selectedSplitMembers);
+    final notes = _notesController.text.trim();
 
     try {
-      final result = await state.saveExpense(
-        description: description,
-        amount: amount,
-        paidById: _paidById!,
-        splitType: _splitType,
-        participants: selectedSplitMembers,
-        splits: _calculateSplits(amount, selectedSplitMembers),
-        // The server recomputes the splits from these, so an exact or
-        // percentage expense is validated in one place rather than two.
-        values: _splitType == SplitType.equal
-            ? null
-            : _customValues(selectedSplitMembers),
-        groupId: widget.groupId,
-        date: _selectedDate,
-        notes: _notesController.text.trim(),
-      );
+      final result = widget.isEditing
+          ? await state.updateExpense(
+              expenseId: widget.existingExpense!.id,
+              description: description,
+              category: _selectedCategory,
+              amount: amount,
+              paidById: _paidById!,
+              splitType: _splitType,
+              participants: selectedSplitMembers,
+              values: values,
+              date: _selectedDate,
+              notes: notes,
+            )
+          : await state.saveExpense(
+              description: description,
+              category: _selectedCategory,
+              amount: amount,
+              paidById: _paidById!,
+              splitType: _splitType,
+              participants: selectedSplitMembers,
+              splits: _calculateSplits(amount, selectedSplitMembers),
+              values: values,
+              groupId: widget.groupId,
+              date: _selectedDate,
+              notes: notes,
+            );
 
       if (!mounted) return;
 
       if (result['success'] != true) {
         showAppSnack(
           context,
-          (result['message'] ?? 'Could not save the expense').toString(),
+          (result['message'] ??
+                  'Could not ${widget.isEditing ? 'update' : 'save'} the expense')
+              .toString(),
           success: false,
         );
         return;
@@ -275,13 +346,23 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
       state.pushNotification(
         kind: ActivityKind.expenseAdded,
-        title: 'You added "$description"',
+        title:
+            'You ${widget.isEditing ? 'updated' : 'added'} "$description"',
         subtitle:
             '${formatMoney(amount, symbol: symbol)} · split ${selectedSplitMembers.length} ways',
       );
 
-      showAppSnack(context, 'Expense saved');
-      Navigator.pop(context);
+      showAppSnack(
+          context, widget.isEditing ? 'Expense updated' : 'Expense saved');
+
+      if (widget.isEditing) {
+        // An edit is reached through Group -> Expense detail -> here; after
+        // saving the change, go straight back to Home rather than retracing
+        // those screens one at a time.
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      } else {
+        Navigator.pop(context, true);
+      }
     } catch (e) {
       if (mounted) showAppSnack(context, 'Could not save: $e', success: false);
     } finally {
@@ -391,6 +472,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   void dispose() {
     _amountController.dispose();
+    _titleController.dispose();
     _notesController.dispose();
     for (final controller in _customAmountControllers.values) {
       controller.dispose();
@@ -434,7 +516,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Add expense'),
+            Text(widget.isEditing ? 'Edit expense' : 'Add expense'),
             if (group != null)
               Text(
                 group.name,
@@ -470,6 +552,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     controller: _amountController,
                     currencySymbol: symbol,
                     onChanged: (_) => setState(_seedCustomFields),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  PSTextField(
+                    label: 'Title',
+                    placeholder: 'What was this for? e.g. Tea, Cab fare',
+                    controller: _titleController,
+                    textInputAction: TextInputAction.next,
+                    validator: (val) => (val == null || val.trim().isEmpty)
+                        ? 'Give this expense a title'
+                        : null,
                   ),
                   const SizedBox(height: AppSpacing.lg),
 
@@ -544,7 +637,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   PSButton(
-                    label: 'Save expense',
+                    label: widget.isEditing ? 'Update expense' : 'Save expense',
                     onPressed: _isSaving ? null : _saveExpense,
                     isLoading: _isSaving,
                   ),
