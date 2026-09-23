@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../state/state_manager.dart';
@@ -182,13 +184,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     busy ? null : () => _handlePasswordLogin(state),
                 isLoading: _isAuthenticating,
               ),
-              const SizedBox(height: AppSpacing.md),
-              const AuthDivider(),
-              const SizedBox(height: AppSpacing.md),
-              GoogleButton(
-                isLoading: _isGoogleAuthenticating,
-                onPressed: busy ? null : () => _handleGoogleLogin(state),
-              ),
+              // Google sign-in is Android-only; iOS signs in with email or
+              // phone alone. The divider goes with it, since it exists only to
+              // separate the two methods.
+              if (!Platform.isIOS) ...[
+                const SizedBox(height: AppSpacing.md),
+                const AuthDivider(),
+                const SizedBox(height: AppSpacing.md),
+                GoogleButton(
+                  isLoading: _isGoogleAuthenticating,
+                  onPressed: busy ? null : () => _handleGoogleLogin(state),
+                ),
+              ],
             ],
           ),
         ),

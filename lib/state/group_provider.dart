@@ -41,6 +41,24 @@ class GroupProvider extends ChangeNotifier {
   double userBalanceIn(String groupId, String userId) =>
       balancesFor(groupId).balanceFor(userId);
 
+  /// Total the user is owed across every loaded group, and the total they owe.
+  /// These sum the same per-group balances the group cards show, so the
+  /// dashboard headline can never disagree with the list beneath it.
+  double totalOwedAcrossGroups(String userId) =>
+      _sumBalances(userId, positive: true);
+
+  double totalOweAcrossGroups(String userId) =>
+      _sumBalances(userId, positive: false);
+
+  double _sumBalances(String userId, {required bool positive}) {
+    double total = 0.0;
+    for (final g in _groups) {
+      final bal = userBalanceIn(g.id, userId);
+      if (positive ? bal > 0.01 : bal < -0.01) total += bal.abs();
+    }
+    return total;
+  }
+
   /// Groups of one kind, for the type filter chips.
   List<GroupModel> groupsOfType(GroupType type) =>
       _groups.where((g) => g.type == type).toList();
@@ -194,15 +212,13 @@ class GroupProvider extends ChangeNotifier {
     return result;
   }
 
-  Future<Map<String, dynamic>> inviteByContact({
+  Future<Map<String, dynamic>> inviteByEmail({
     required String groupId,
-    String? email,
-    String? mobileNumber,
+    required String email,
   }) async {
     final result = await ApiService.inviteToGroup(
       groupId: groupId,
       email: email,
-      mobileNumber: mobileNumber,
     );
     if (result['success'] == true && result['group'] != null) {
       _upsert(result['group'] as GroupModel);

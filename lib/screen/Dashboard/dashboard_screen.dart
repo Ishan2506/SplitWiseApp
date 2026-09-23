@@ -9,6 +9,7 @@ import '../activity_tab.dart';
 import '../history_tab.dart';
 import '../profile/profile_screen.dart';
 import '../groups/create_group_screen.dart';
+import '../groups/join_group_screen.dart';
 import '../add_expense_screen.dart';
 
 /// The app shell: brand bar on top, four tabs plus a raised "add" action in a
@@ -60,6 +61,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const CreateGroupScreen()),
+        );
+      case 'join':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const JoinGroupScreen()),
         );
     }
   }
@@ -449,6 +455,14 @@ class _QuickAddSheet extends StatelessWidget {
               title: 'Create a group',
               subtitle: 'Start splitting with new people',
               value: 'group',
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            _option(
+              context,
+              icon: Icons.qr_code_scanner_rounded,
+              title: 'Join a group',
+              subtitle: 'Enter an invite code or scan a QR',
+              value: 'join',
             ),
           ],
         ),

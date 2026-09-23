@@ -11,7 +11,7 @@ import 'join_group_screen.dart';
 /// Pulls the invite code out of a link, if it holds one.
 ///
 /// Two shapes are recognised, matching what the backend hands out:
-///   `splitwise://join/<CODE>` — the app's own scheme
+///   `paisasplit://join/<CODE>` — the app's own scheme
 ///   `https://<host>/join/<CODE>` — the web fallback / QR payload
 ///
 /// A `?code=` query is accepted as a last resort, so the same parsing serves
@@ -19,8 +19,10 @@ import 'join_group_screen.dart';
 String? inviteCodeFromUri(Uri uri) {
   final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
 
-  // splitwise://join/<CODE> — "join" lands in the host on custom schemes.
-  if (uri.scheme == 'splitwise') {
+  // paisasplit://join/<CODE> — "join" lands in the host on custom schemes.
+  // The retired "splitwise" scheme is still parsed so links shared before the
+  // rename keep working if they reach us at all.
+  if (uri.scheme == 'paisasplit' || uri.scheme == 'splitwise') {
     if (uri.host == 'join' && segments.isNotEmpty) return segments.first;
     if (segments.length >= 2 && segments.first == 'join') return segments[1];
   }

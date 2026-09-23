@@ -662,22 +662,18 @@ class ApiService {
         fallbackError: 'Could not remove the member',
       );
 
-  /// POST /groups/:id/invites — invite by email or mobile. People who already
-  /// have an account are added immediately; everyone else becomes a pending
-  /// invite until they join through the link or QR code.
+  /// POST /groups/:id/invites — invite by email. People who already have an
+  /// account are added immediately; everyone else is emailed the invite code
+  /// and stays pending until they join through the link or QR code.
   static Future<Map<String, dynamic>> inviteToGroup({
     required String groupId,
-    String? email,
-    String? mobileNumber,
+    required String email,
   }) =>
       _groupRequest(
         () => http.post(
           Uri.parse('$baseUrl/groups/$groupId/invites'),
           headers: _getHeaders(),
-          body: jsonEncode({
-            'email': ?email,
-            'mobileNumber': ?mobileNumber,
-          }),
+          body: jsonEncode({'email': email}),
         ),
         fallbackError: 'Could not send the invite',
       );

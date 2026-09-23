@@ -7,11 +7,12 @@ import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
 import '../../widgets/common_widgets.dart';
 
-/// Edit the signed-in user's profile: name, phone and preferred currency.
+/// Edit the signed-in user's profile: name, email, phone and preferred
+/// currency.
 ///
-/// Saving sends only the fields that actually changed, so an untouched phone
-/// number is never re-submitted — the server rejects a duplicate mobile even
-/// when it belongs to the same account.
+/// Saving sends only the fields that actually changed, so an untouched email or
+/// phone number is never re-submitted — the server rejects a duplicate of
+/// either even when it belongs to the same account.
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -22,6 +23,7 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
+  late final TextEditingController _emailController;
   late final TextEditingController _phoneController;
 
   bool _isSaving = false;
@@ -29,6 +31,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   /// The values we started from, used to send only what changed.
   late final String _initialName;
+  late final String _initialEmail;
   late final String _initialPhone;
 
   @override
@@ -37,21 +40,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final user = context.read<StateManager>().currentUserModel;
 
     _initialName = user?.name ?? '';
+    _initialEmail = user?.email ?? '';
     _initialPhone = user?.mobileNumber ?? '';
 
     _nameController = TextEditingController(text: _initialName);
+    _emailController = TextEditingController(text: _initialEmail);
     _phoneController = TextEditingController(text: _initialPhone);
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _emailController.dispose();
     _phoneController.dispose();
     super.dispose();
   }
 
   bool get _hasChanges =>
       _nameController.text.trim() != _initialName ||
+      _emailController.text.trim() != _initialEmail ||
       _phoneController.text.trim() != _initialPhone;
 
   Future<void> _save() async {
@@ -62,18 +69,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
 
-    setState(() => _isSaving = true);
-
     final state = context.read<StateManager>();
     final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
     final phone = _phoneController.text.trim();
+
+    // Sign-in needs one of the two, so refuse to leave the account with
+    // neither. Checked here rather than per-field because either one alone
+    // is valid — it is only the empty pair that locks the user out.
+    if (email.isEmpty && phone.isEmpty) {
+      showAppSnack(
+        context,
+        'Keep either an email or a phone number so you can sign in',
+        success: false,
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
 
     final result = await state.updateProfile(
       name: name != _initialName ? name : null,
       // Unchanged fields are passed as null and dropped from the request, so
-      // an untouched number is never re-submitted (the server rejects a
-      // duplicate mobile even when it is the user's own). A cleared field
-      // still sends '', which is what removes the number.
+      // an untouched email or number is never re-submitted (the server rejects
+      // a duplicate of either even when it is the user's own). A cleared field
+      // still sends '', which is what removes it.
+      email: email != _initialEmail ? email : null,
       mobileNumber: phone != _initialPhone ? phone : null,
     );
 
@@ -255,6 +276,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     validator: (val) => (val == null || val.trim().isEmpty)
                         ? 'Your name cannot be empty'
                         : null,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+
+                  PSTextField(
+                    label: 'Email',
+                    placeholder: 'you@example.com',
+                    helperText: 'Email or phone — at least one is required',
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => setState(() {}),
+                    // Same shape the sign-up screen accepts; an empty value is
+                    // allowed here because a phone number can stand in for it.
+                    validator: (val) {
+                      final v = (val ?? '').trim();
+                      if (v.isEmpty) return null;
+                      final emailRegex = RegExp(
+                        r'^[a-zA-Z0-9][a-zA-Z0-9._%-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$',
+                      );
+                      if (!emailRegex.hasMatch(v)) {
+                        return 'Enter a valid email address';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: AppSpacing.md),
 

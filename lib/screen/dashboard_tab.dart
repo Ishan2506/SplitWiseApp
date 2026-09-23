@@ -39,8 +39,11 @@ class _DashboardTabState extends State<DashboardTab> {
     final provider = context.watch<GroupProvider>();
 
     final userId = state.currentUserId;
-    final owed = state.getUserTotalOwed(userId);
-    final owe = state.getUserTotalOwe(userId);
+    // Totals come from the same server-fetched group balances as the cards
+    // below; deriving them locally would read an empty expense list and show
+    // zero while the cards showed real amounts.
+    final owed = provider.totalOwedAcrossGroups(userId);
+    final owe = provider.totalOweAcrossGroups(userId);
     final net = owed - owe;
 
     final firstName = state.currentUser.name.trim().split(' ').first;
