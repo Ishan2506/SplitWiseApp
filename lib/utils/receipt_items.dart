@@ -107,6 +107,7 @@ ItemisedReceipt extractItems(List<OcrRow> rows, double imageWidth) {
 
   final amountColumn = detectAmountColumn(rows, imageWidth);
   if (amountColumn == null) return const ItemisedReceipt.empty();
+  final qtyColumn = detectQtyColumn(rows, imageWidth, amountColumn);
 
   // Items live between the header and the first summary row. Scanning the
   // whole page instead would pull "Grand Total 1302" in as an item, which is
@@ -114,18 +115,78 @@ ItemisedReceipt extractItems(List<OcrRow> rows, double imageWidth) {
   final end = rows.indexWhere((r) => _summaryMarkers.hasMatch(r.text));
   final itemRows = end >= 0 ? rows.sublist(0, end) : rows;
 
+  // How close two printed lines have to be for the second to plausibly be a
+  // continuation of the first, rather than an unrelated line — the header
+  // (merchant name, address) sits well clear of the table below it, while a
+  // wrapped name's second line sits right under its first at normal line
+  // spacing. Derived from the token heights actually on this receipt rather
+  // than a fixed pixel count, so it scales with the photo's resolution.
+  final heights = rows
+      .expand((r) => r.tokens.map((t) => t.height))
+      .where((h) => h > 0)
+      .toList()
+    ..sort();
+  final medianHeight = heights.isEmpty ? 10.0 : heights[heights.length ~/ 2];
+  final wrapGapTolerance = medianHeight * 2.2;
+
   final items = <ReceiptItem>[];
-  for (final row in itemRows) {
-    final item = _itemFromRow(row, amountColumn, imageWidth);
-    if (item != null) items.add(item);
+  for (var i = 0; i < itemRows.length; i++) {
+    final row = itemRows[i];
+    final item = _itemFromRow(row, amountColumn, qtyColumn, imageWidth);
+    if (item != null) {
+      items.add(item);
+      continue;
+    }
+
+    // MULTI-LINE ITEM NAME: a row with real words but no figure in the
+    // amount column is usually the first line of a dish name that wrapped
+    // onto the row below it — routine on a narrow thermal roll whenever a
+    // name runs longer than the column ("Crispy Chilli" / "Baby Corn").
+    // Dropping it, as before, silently lost the whole item; folding its text
+    // onto the row that does carry the amount keeps it. The gap check is
+    // what stops this from also swallowing the merchant header into
+    // whatever the first item happens to be.
+    if (_looksLikeOrphanName(row.text) &&
+        i + 1 < itemRows.length &&
+        (itemRows[i + 1].centerY - row.centerY) <= wrapGapTolerance) {
+      final next = _itemFromRow(itemRows[i + 1], amountColumn, qtyColumn, imageWidth);
+      if (next != null) {
+        items.add(ReceiptItem(
+          name: _cleanName('${row.text} ${next.name}'),
+          quantity: next.quantity,
+          lineTotal: next.lineTotal,
+          flags: [...next.flags, 'merged_multiline'],
+        ));
+        i++; // the next row's text is already folded in — do not read it again
+        continue;
+      }
+    }
   }
 
   final total = items.fold<double>(0, (sum, i) => sum + i.lineTotal);
   return ItemisedReceipt(items: items, itemsTotal: total);
 }
 
+/// Whether an amount-less row looks like the orphaned first line of a
+/// wrapped item name, as opposed to noise that just happens not to be an
+/// item either way.
+bool _looksLikeOrphanName(String text) {
+  if (text.isEmpty || _separatorOnly.hasMatch(text)) return false;
+  if (_neverItem.hasMatch(text)) return false;
+  return _hasWords(text);
+}
+
 /// Reads one row as an item, or returns null if it is not one.
-ReceiptItem? _itemFromRow(OcrRow row, double amountColumn, double imageWidth) {
+///
+/// [qtyColumn] is the x-position of a detected quantity column, or null on a
+/// bill that does not print one — in which case a quantity written into the
+/// name itself ("2 x Naan") is still picked up further down.
+ReceiptItem? _itemFromRow(
+  OcrRow row,
+  double amountColumn,
+  double? qtyColumn,
+  double imageWidth,
+) {
   final text = row.text;
   if (text.isEmpty || _separatorOnly.hasMatch(text)) return null;
   if (_neverItem.hasMatch(text)) return null;
@@ -152,12 +213,30 @@ ReceiptItem? _itemFromRow(OcrRow row, double amountColumn, double imageWidth) {
   // header. Not an item.
   if (lineTotal == null) return null;
 
-  final left = row.tokens.sublist(0, amountIndex);
+  var left = row.tokens.sublist(0, amountIndex);
   if (left.isEmpty) return null;
 
-  var name = left.map((t) => t.text).join(' ');
   var quantity = 1;
   final flags = <String>[];
+
+  // QTY from a dedicated column, pulled out before the name is built so the
+  // digit does not end up stuck on the end of it (a bare "Baby Corn 1" was
+  // the previous behaviour whenever a bill printed a Qty column).
+  if (qtyColumn != null) {
+    for (var i = left.length - 1; i >= 0; i--) {
+      final right = left[i].right;
+      if ((right - qtyColumn).abs() > imageWidth * 0.06) continue;
+      if (!RegExp(r'^\d{1,2}$').hasMatch(left[i].text.trim())) continue;
+      final parsed = int.tryParse(left[i].text.trim());
+      if (parsed != null && parsed > 0) {
+        quantity = parsed;
+        left = [...left.sublist(0, i), ...left.sublist(i + 1)];
+      }
+      break;
+    }
+  }
+
+  var name = left.map((t) => t.text).join(' ');
 
   // A trailing number just before the amount is a unit rate, printed by tills
   // that carry a rate column. Only treat it as one when real words remain to

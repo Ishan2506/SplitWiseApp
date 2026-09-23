@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:splitwise_app/utils/receipt_geometry.dart';
 import 'package:splitwise_app/utils/receipt_parser.dart';
 
 /// The parser is the one part of the receipt flow with no UI, so it carries
@@ -190,6 +191,54 @@ Thank you, visit again!
       final result = ReceiptParser.parse('');
       expect(result.fieldsFound, 0);
       expect(result.total.isPresent, isFalse);
+    });
+  });
+
+  group('parseWithLayout', () {
+    OcrToken tok(String text, double x, double y, {double w = 60, double h = 20}) =>
+        OcrToken(text: text, x: x, y: y, width: w, height: h);
+
+    test(
+        'reads the true grand total instead of the first item, when the '
+        'label and its amount land in different OCR blocks', () {
+      // A hotel folio, 400px wide. ML Kit reads the labels as one block and
+      // the amounts as a second block — its usual behaviour whenever a wide
+      // gap separates a name column from a price column, and exactly what
+      // real hotel/rent bills tend to do. Flattened to text this reads
+      // "...Total\n3000.00...", so a purely text-based reading that falls
+      // back to "the next line" for a bare label picks up Room Charge's
+      // price instead of the real total.
+      final tokens = [
+        // labels block (token order, not visual order — mirrors block order)
+        tok('Hotel Sunrise', 20, 10),
+        tok('Room Charge', 20, 100),
+        tok('Food Charge', 20, 130),
+        tok('Laundry', 20, 160),
+        tok('Total', 20, 210),
+        // amounts block, far to the right, on the same visual rows
+        tok('3000.00', 320, 100, w: 60),
+        tok('1200.00', 320, 130, w: 60),
+        tok('200.00', 320, 160, w: 60),
+        tok('4400.00', 320, 210, w: 60),
+      ];
+
+      // recognized.text concatenates block by block — this is the actual
+      // shape of the bug: "Total" is immediately followed by "3000.00"
+      // (Room Charge's price), not "4400.00".
+      const rawText = 'Hotel Sunrise\nRoom Charge\nFood Charge\nLaundry\n'
+          'Total\n3000.00\n1200.00\n200.00\n4400.00';
+
+      // Proves the bug exists in the text-only path this replaces...
+      expect(ReceiptParser.parse(rawText).total.value, 3000.00);
+
+      // ...and that reading the amount off the same visual row fixes it.
+      final result = ReceiptParser.parseWithLayout(
+        rawText: rawText,
+        tokens: tokens,
+        imageWidth: 400,
+      );
+      expect(result.total.value, 4400.00);
+      expect(result.total.confidence, FieldConfidence.high);
     });
   });
 }

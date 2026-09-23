@@ -154,6 +154,54 @@ double? detectAmountColumn(List<OcrRow> rows, double imageWidth) {
   return bestCount >= 2 ? bestCenter : null;
 }
 
+/// Finds the horizontal position of an optional QUANTITY column.
+///
+/// Looked for the same way as the amount column — clustering small integers
+/// that line up with each other — but restricted to numbers that sit
+/// strictly between the name zone and the amount column, rather than the
+/// wide right-aligned money figures.
+///
+/// Returns null when the bill prints no separate qty column, which is the
+/// common case on a short bill that just prints "Paneer Tikka   240" with
+/// nothing in between — that is a normal layout, not a failed detection.
+/// Callers that get null back read exactly as before this existed; it only
+/// helps the bills that actually have a column to find.
+double? detectQtyColumn(
+  List<OcrRow> rows,
+  double imageWidth,
+  double amountColumn,
+) {
+  if (imageWidth <= 0) return null;
+
+  final candidates = <double>[];
+  for (final row in rows) {
+    for (final token in row.tokens) {
+      final right = token.right;
+      // Too close to the amount column to be a separate quantity cell.
+      if (right >= amountColumn - imageWidth * 0.08) continue;
+      // Still inside the name column — a stray "1" this far left is a
+      // serial number or part of an address, not a quantity.
+      if (right < imageWidth * 0.3) continue;
+      if (RegExp(r'^\d{1,2}$').hasMatch(token.text.trim())) {
+        candidates.add(right);
+      }
+    }
+  }
+  if (candidates.length < 2) return null;
+
+  final bandwidth = imageWidth * 0.05;
+  double? bestCenter;
+  var bestCount = 0;
+  for (final x in candidates) {
+    final near = candidates.where((v) => (v - x).abs() <= bandwidth).toList();
+    if (near.length > bestCount) {
+      bestCount = near.length;
+      bestCenter = near.reduce((a, b) => a + b) / near.length;
+    }
+  }
+  return bestCount >= 2 ? bestCenter : null;
+}
+
 /// Reads a single token as a money amount, or null if it is not one.
 ///
 /// Deliberately strict: it matches a whole token only, so "2x" and "GST18%"

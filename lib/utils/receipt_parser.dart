@@ -219,17 +219,79 @@ class ReceiptParser {
     final base = parse(rawText);
     if (tokens.isEmpty || imageWidth <= 0) return base;
 
-    final itemised = extractItems(buildRows(tokens), imageWidth);
-    if (itemised.isEmpty) return base;
+    final rows = buildRows(tokens);
+    final itemised = extractItems(rows, imageWidth);
+
+    // Re-read the total from the same VISUAL ROW as its keyword, instead of
+    // the text-based reading above, which walks the flattened OCR string —
+    // ML Kit's block order, not the page's visual order. On a bill whose
+    // "Total" label and its amount land in different OCR blocks (common on
+    // hotel folios and other tabular bills), the text version falls back to
+    // "whatever line comes next in the flat text", which is really the start
+    // of the next block — typically the first item's price. Reading the same
+    // row's amount column instead fixes that regardless of block order.
+    final geometryTotal = _extractTotalFromRows(rows, imageWidth);
+
+    if (itemised.isEmpty && geometryTotal == null) return base;
 
     return ReceiptData(
       merchant: base.merchant,
-      total: base.total,
+      total: geometryTotal ?? base.total,
       date: base.date,
       category: base.category,
       rawText: base.rawText,
       items: itemised.items,
     );
+  }
+
+  /// Finds the payable total by reading the amount column on the same visual
+  /// row as a total keyword, rather than guessing at nearby lines of flat
+  /// text. See [parseWithLayout] for why that distinction matters.
+  ///
+  /// Returns null when there is no usable amount column, or no keyword row
+  /// yields a number — callers should fall back to [_extractTotal] then.
+  static ExtractedField<double>? _extractTotalFromRows(
+    List<OcrRow> rows,
+    double imageWidth,
+  ) {
+    if (rows.isEmpty) return null;
+    final amountColumn = detectAmountColumn(rows, imageWidth);
+    if (amountColumn == null) return null;
+
+    final slack = imageWidth * 0.05;
+
+    double? amountInRow(OcrRow row) {
+      for (var t = row.tokens.length - 1; t >= 0; t--) {
+        final value = parseAmountToken(row.tokens[t].text);
+        if (value == null) continue;
+        if (row.tokens[t].right < amountColumn - slack) continue;
+        return value;
+      }
+      return null;
+    }
+
+    for (final keyword in _totalKeywords) {
+      // Walk bottom-up: the payable total sits near the foot of the bill.
+      for (var i = rows.length - 1; i >= 0; i--) {
+        final lower = rows[i].text.toLowerCase();
+        if (!lower.contains(keyword)) continue;
+        if (_excludedKeywords.any(lower.contains)) continue;
+
+        // The label and its amount are usually the same printed row. A folio
+        // line that wrapped can still split them one row apart, so check the
+        // row directly below before moving on to a weaker keyword.
+        final amount = amountInRow(rows[i]) ??
+            (i + 1 < rows.length ? amountInRow(rows[i + 1]) : null);
+        if (amount == null || amount <= 0) continue;
+
+        final strong = keyword.contains('total') || keyword.contains('payable');
+        return ExtractedField(
+          amount,
+          strong ? FieldConfidence.high : FieldConfidence.medium,
+        );
+      }
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -264,10 +326,14 @@ class ReceiptParser {
     final digits = RegExp(r'\d').allMatches(line).length;
     if (digits > line.length / 3) return false;
 
+    // An actual address, e.g. "user@domain.com" — never a shop's name.
+    if (line.contains('@')) return false;
+
     final lower = line.toLowerCase();
     const skip = [
       'invoice', 'receipt', 'bill', 'tax', 'gst', 'phone', 'tel', 'www',
       'http', 'welcome', 'thank', 'order', 'table', 'date', 'time', 'cashier',
+      'email', 'e-mail', 'contact', 'mobile', 'address',
     ];
     if (skip.any(lower.contains)) return false;
 
@@ -324,8 +390,16 @@ class ReceiptParser {
   /// Every number in [line] that could be a money amount.
   static List<double> _amountsIn(String line) {
     // Optional currency mark, thousands separators, optional decimals.
+    //
+    // The comma-grouped branch requires AT LEAST ONE comma group (`+`, not
+    // `*`): with `*` it also matched zero groups, so it "succeeded" after
+    // just the first 1-3 digits of any longer comma-less number and never
+    // fell through to try the plain-digits branch — "4400.00" silently read
+    // as 440.0. Bills that print totals without a thousands separator (or
+    // where a thin comma glyph just got missed by OCR) are common, so this
+    // is not a rare edge case.
     final pattern = RegExp(
-      r'(?:₹|rs\.?|inr|\$)?\s*(\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)',
+      r'(?:₹|rs\.?|inr|\$)?\s*((?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{1,2})?)',
       caseSensitive: false,
     );
 

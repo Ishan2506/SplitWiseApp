@@ -216,6 +216,86 @@ void main() {
       expect(result.items.single.name, 'Veg Pulao');
     });
 
+    /// A serial-number column, a Qty column separate from Price and Amount,
+    /// and dish names that wrap onto a second printed line whenever they run
+    /// long — a hotel/restaurant folio, not a short thermal till receipt.
+    /// Four of six names here wrap; two do not, so the case covers both.
+    List<OcrToken> hotelFolioTokens() => [
+          // No. column, aligned to each item's FIRST printed line.
+          tok('1', 15, 250, w: 15),
+          tok('2', 15, 304, w: 15),
+          tok('3', 15, 358, w: 15),
+          tok('4', 15, 412, w: 15),
+          tok('5', 15, 444, w: 15),
+          tok('6', 15, 498, w: 15),
+          // Item 1: "Water Bottle" / "(packaged)" — wraps.
+          tok('Water', 40, 250),
+          tok('Bottle', 95, 250),
+          tok('(packaged)', 40, 272, w: 90),
+          tok('1', 255, 272, w: 20),
+          tok('30.00', 295, 272, w: 55),
+          tok('30.00', 360, 272, w: 55),
+          // Item 2: "Crispy Chilli" / "Baby Corn" — wraps.
+          tok('Crispy', 40, 304),
+          tok('Chilli', 100, 304),
+          tok('Baby', 40, 326),
+          tok('Corn', 80, 326),
+          tok('1', 255, 326, w: 20),
+          tok('170.00', 295, 326, w: 55),
+          tok('170.00', 360, 326, w: 55),
+          // Item 3: "Kashmiri" / "Pulao" — wraps.
+          tok('Kashmiri', 40, 358),
+          tok('Pulao', 40, 380),
+          tok('1', 255, 380, w: 20),
+          tok('130.00', 295, 380, w: 55),
+          tok('130.00', 360, 380, w: 55),
+          // Item 4: "Kadai Chicken" — one line, no wrap.
+          tok('Kadai', 40, 412),
+          tok('Chicken', 90, 412),
+          tok('1', 255, 412, w: 20),
+          tok('250.00', 295, 412, w: 55),
+          tok('250.00', 360, 412, w: 55),
+          // Item 5: "Mutton" / "Biryani" — wraps.
+          tok('Mutton', 40, 444),
+          tok('Biryani', 40, 466),
+          tok('1', 255, 466, w: 20),
+          tok('220.00', 295, 466, w: 55),
+          tok('220.00', 360, 466, w: 55),
+          // Item 6: "Soft Drinks" — one line, no wrap.
+          tok('Soft', 40, 498),
+          tok('Drinks', 80, 498),
+          tok('1', 255, 498, w: 20),
+          tok('40.00', 295, 498, w: 55),
+          tok('40.00', 360, 498, w: 55),
+          // Summary row.
+          tok('Sub', 250, 530),
+          tok('Total', 290, 530),
+          tok('840.00', 360, 530, w: 55),
+        ];
+
+    test(
+        'reads all six items on a folio with a serial column, a Qty column, '
+        'and wrapped names — none dropped, none missing their second word',
+        () {
+      final result = extractItems(buildRows(hotelFolioTokens()), 450);
+
+      expect(
+        result.items.map((i) => i.name).toList(),
+        [
+          'Water Bottle (packaged)',
+          'Crispy Chilli Baby Corn',
+          'Kashmiri Pulao',
+          'Kadai Chicken',
+          'Mutton Biryani',
+          'Soft Drinks',
+        ],
+      );
+      expect(result.items.map((i) => i.lineTotal).toList(),
+          [30.00, 170.00, 130.00, 250.00, 220.00, 40.00]);
+      expect(result.items.every((i) => i.quantity == 1), isTrue);
+      expect(result.itemsTotal, 840.00);
+    });
+
     test('ignores a row whose only number is outside the amount column', () {
       final rows = buildRows([
         tok('Paneer Tikka', 20, 50),
