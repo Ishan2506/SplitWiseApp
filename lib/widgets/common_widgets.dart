@@ -632,6 +632,15 @@ class PSFilterChips extends StatelessWidget {
 // Identity
 // ---------------------------------------------------------------------------
 
+/// The [AppColors.avatarTints]/[AppColors.avatarInk] index a name resolves
+/// to — the same deterministic pick [AvatarWidget.forName] uses, exposed so
+/// other widgets (a per-person chart slice, say) can match a person's colour
+/// without duplicating the hash.
+int avatarTintIndexFor(String name) => name.isEmpty
+    ? 0
+    : name.codeUnits.fold<int>(0, (a, b) => a + b) %
+        AppColors.avatarTints.length;
+
 /// Circular initials avatar. Colour is derived from the name so the same
 /// person keeps the same tint everywhere in the app.
 class AvatarWidget extends StatelessWidget {
@@ -661,10 +670,7 @@ class AvatarWidget extends StatelessWidget {
     bool showBorder = false,
     String? imageUrl,
   }) {
-    final index = name.isEmpty
-        ? 0
-        : name.codeUnits.fold<int>(0, (a, b) => a + b) %
-            AppColors.avatarTints.length;
+    final index = avatarTintIndexFor(name);
     return AvatarWidget(
       initials: initialsOf(name),
       size: size,

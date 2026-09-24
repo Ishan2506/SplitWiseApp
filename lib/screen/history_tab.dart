@@ -118,7 +118,7 @@ class _HistoryTabState extends State<HistoryTab> {
                       expense: expense,
                       userId: userId,
                       groupName: _groupOf(state, expense.groupId)?.name,
-                      payerName: _memberName(state, expense.paidById),
+                      payerName: _payersLabel(state, expense, userId),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                   ],
@@ -145,6 +145,28 @@ class _HistoryTabState extends State<HistoryTab> {
     }
     return 'Someone';
   }
+
+  /// "You paid", "Priya paid", or for a split payment "You and 1 other
+  /// paid" — [_ExpenseRow] appends " paid" itself, so this returns just
+  /// the name/summary.
+  String _payersLabel(StateManager state, Expense expense, String userId) {
+    if (!expense.hasMultiplePayers) {
+      return expense.paidById == userId
+          ? 'You'
+          : _memberName(state, expense.paidById);
+    }
+    final ids = expense.payers.keys.toList();
+    final others = ids.where((id) => id != userId).toList();
+    if (ids.contains(userId)) {
+      return others.isEmpty
+          ? 'You'
+          : 'You and ${others.length} other${others.length == 1 ? '' : 's'}';
+    }
+    final remaining = ids.length - 1;
+    return remaining <= 0
+        ? _memberName(state, ids.first)
+        : '${_memberName(state, ids.first)} and $remaining other${remaining == 1 ? '' : 's'}';
+  }
 }
 
 class _ExpenseRow extends StatelessWidget {
@@ -168,20 +190,22 @@ class _ExpenseRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final share = expense.splits[userId] ?? 0;
-    final paidByMe = expense.paidById == userId;
+    final myContribution = expense.payers[userId] ?? 0;
     // History spans every group, so it uses the user's own symbol rather than
     // any one group's.
     final symbol = context.watch<StateManager>().currencySymbol;
 
-    // If you paid, you are owed everyone else's share; otherwise you owe yours.
-    final youLabel = paidByMe ? 'you lent' : 'your share';
-    final youAmount = paidByMe ? expense.amount - share : share;
+    // Net of what you fronted against your share: positive means you're
+    // owed, negative means you still owe.
+    final net = myContribution - share;
+    final youLabel = net >= 0 ? 'you lent' : 'your share';
+    final youAmount = net.abs();
 
     return ExpenseItem(
       title: expense.description,
       subtitle: [
         ?groupName,
-        '${paidByMe ? 'You' : payerName} paid',
+        '$payerName paid',
       ].join(' · '),
       amount: formatMoney(expense.amount, symbol: symbol),
       day: expense.date.day.toString().padLeft(2, '0'),

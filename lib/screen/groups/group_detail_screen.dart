@@ -1,8 +1,14 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../model/group_model.dart';
 import '../../models/models.dart';
+import '../../network/api_service.dart';
 import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
@@ -13,9 +19,11 @@ import '../add_expense_screen.dart';
 import '../expense_detail_screen.dart';
 import '../receipt/receipt_scan_screen.dart';
 import 'create_group_screen.dart';
+import 'group_charts_screen.dart';
 import 'group_members_screen.dart';
 import 'group_widgets.dart';
 import 'invite_screen.dart';
+import 'recurring_expenses_screen.dart';
 import 'settle_up_screen.dart';
 import 'who_owes_whom_screen.dart';
 
@@ -40,6 +48,45 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       context.read<StateManager>().loadGroupExpenses(widget.groupId);
     });
   } 
+
+  /// Downloads the group's expense history as a CSV and hands it to the
+  /// OS share sheet. On web there is no filesystem to write to, so the CSV
+  /// text goes straight to the share sheet instead of as a file attachment.
+  Future<void> _exportCsv(GroupModel group) async {
+    final result = await ApiService.exportGroupExpensesCsv(group.id);
+    if (!mounted) return;
+
+    if (result['success'] != true) {
+      showAppSnack(
+        context,
+        result['message'] ?? 'Could not export expenses',
+        success: false,
+      );
+      return;
+    }
+
+    final csv = result['csv'] as String;
+    final subject = '${group.name} expenses';
+
+    try {
+      if (kIsWeb) {
+        await SharePlus.instance.share(ShareParams(text: csv, subject: subject));
+        return;
+      }
+      final dir = await getTemporaryDirectory();
+      final filename =
+          '${group.name.replaceAll(RegExp(r'[^a-zA-Z0-9]+'), '_')}_expenses.csv';
+      final file = File('${dir.path}/$filename');
+      await file.writeAsString(csv);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)], subject: subject),
+      );
+    } catch (e) {
+      if (mounted) {
+        showAppSnack(context, 'Could not share the export: $e', success: false);
+      }
+    }
+  }
 
   Future<void> _confirmDelete(GroupModel group) async {
     final confirmed = await showDialog<bool>(
@@ -118,6 +165,16 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         title: Text(group.name, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
+            tooltip: 'Spending insights',
+            icon: const Icon(Icons.pie_chart_outline_rounded),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => GroupChartsScreen(groupId: group.id),
+              ),
+            ),
+          ),
+          IconButton(
             tooltip: 'Invite people',
             icon: const Icon(Icons.person_add_alt_1_rounded),
             onPressed: () => Navigator.push(
@@ -125,24 +182,53 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               MaterialPageRoute(builder: (_) => InviteScreen(groupId: group.id)),
             ),
           ),
-          if (isCreator)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert_rounded),
-              onSelected: (value) {
-                if (value == 'edit') {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          CreateGroupScreen(existingGroupId: group.id),
-                    ),
-                  );
-                } else if (value == 'delete') {
-                  _confirmDelete(group);
-                }
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (value) {
+              if (value == 'edit') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        CreateGroupScreen(existingGroupId: group.id),
+                  ),
+                );
+              } else if (value == 'delete') {
+                _confirmDelete(group);
+              } else if (value == 'recurring') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => RecurringExpensesScreen(groupId: group.id),
+                  ),
+                );
+              } else if (value == 'export') {
+                _exportCsv(group);
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'recurring',
+                child: Row(
+                  children: [
+                    Icon(Icons.repeat_rounded, size: 18),
+                    SizedBox(width: 10),
+                    Text('Recurring expenses'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'export',
+                child: Row(
+                  children: [
+                    Icon(Icons.file_download_outlined, size: 18),
+                    SizedBox(width: 10),
+                    Text('Export as CSV'),
+                  ],
+                ),
+              ),
+              if (isCreator) ...[
+                const PopupMenuItem(
                   value: 'edit',
                   child: Row(
                     children: [
@@ -152,7 +238,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     ],
                   ),
                 ),
-                PopupMenuItem(
+                const PopupMenuItem(
                   value: 'delete',
                   child: Row(
                     children: [
@@ -165,7 +251,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   ),
                 ),
               ],
-            ),
+            ],
+          ),
           const SizedBox(width: AppSpacing.xxs),
         ],
       ),
@@ -844,27 +931,48 @@ class _GroupExpenseRow extends StatelessWidget {
 
   /// Payer names come from the group's own roster, which is already loaded
   /// here, rather than the global member list.
-  String _payerName() {
+  String _memberName(String memberId) {
     for (final m in group.members) {
-      if (m.id == expense.paidById) return m.name;
+      if (m.id == memberId) return m.name;
     }
     return 'Someone';
+  }
+
+  /// "You paid", "Priya paid", or for a split payment "You and 1 other
+  /// paid".
+  String _payersLabel() {
+    if (!expense.hasMultiplePayers) {
+      return expense.paidById == currentUserId ? 'You' : _memberName(expense.paidById);
+    }
+    final ids = expense.payers.keys.toList();
+    final others = ids.where((id) => id != currentUserId).toList();
+    if (ids.contains(currentUserId)) {
+      return others.isEmpty
+          ? 'You'
+          : 'You and ${others.length} other${others.length == 1 ? '' : 's'}';
+    }
+    final remaining = ids.length - 1;
+    return remaining <= 0
+        ? _memberName(ids.first)
+        : '${_memberName(ids.first)} and $remaining other${remaining == 1 ? '' : 's'}';
   }
 
   @override
   Widget build(BuildContext context) {
     final symbol = group.currencySymbol;
     final share = expense.splits[currentUserId] ?? 0;
-    final paidByMe = expense.paidById == currentUserId;
+    final myContribution = expense.payers[currentUserId] ?? 0;
 
-    // If you paid, you are owed everyone else's share; otherwise you owe yours.
-    final youLabel = paidByMe ? 'you lent' : 'your share';
-    final youAmount = paidByMe ? expense.amount - share : share;
+    // Net of what you fronted against your share: positive means you're
+    // owed, negative means you still owe — this holds for a sole payer
+    // (contribution = the whole amount) just as much as a split payment.
+    final net = myContribution - share;
+    final youLabel = net >= 0 ? 'you lent' : 'your share';
+    final youAmount = net.abs();
 
     return ExpenseItem(
       title: expense.description,
-      subtitle:
-          '${expense.category} · ${paidByMe ? 'You' : _payerName()} paid',
+      subtitle: '${expense.category} · ${_payersLabel()} paid',
       amount: formatMoney(expense.amount, symbol: symbol),
       day: expense.date.day.toString().padLeft(2, '0'),
       month: _months[expense.date.month - 1],

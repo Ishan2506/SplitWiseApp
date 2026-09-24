@@ -161,6 +161,12 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       groupId: widget.existingGroupId!,
       name: _groupNameController.text.trim(),
       type: _selectedType,
+      // There is no free-text description field in this form — it only ever
+      // mirrors the type's label, exactly as creation sets it. Keeping it in
+      // step here stops a changed type from leaving the OLD type's name
+      // behind as a stray "description" line on the group header (the
+      // header only shows description when it differs from the type label).
+      description: _selectedType.label,
       currency: _currency,
     );
 

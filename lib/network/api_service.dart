@@ -11,7 +11,7 @@ class ApiService {
   // Physical Android phone: use the PC's LAN IP (phone + PC on same Wi-Fi).
   // Emulator would use 10.0.2.2; web/desktop uses localhost.
   static const String _defaultBaseUrl = kIsWeb
-      ? 'http://localhost:9856/api' //http://localhost:5000/api
+      ? 'http://103.212.121.139:7000/api' //http://localhost:9856/api
       : 'http://103.212.121.139:7000/api';
 
   /// Points the client at a different host. Tests set this to a local stub
@@ -864,6 +864,13 @@ class ApiService {
     Map<String, double>? values,
     DateTime? date,
     String? notes,
+    // Set only when the expense was split between multiple payers — a map
+    // of userId -> amount that userId fronted, summing to [amount].
+    Map<String, double>? payers,
+    // The currency [amount] (and any [values]/[payers] figures) were
+    // entered in. Omitted (or equal to the group's own) means no
+    // conversion is needed; anything else, the server converts.
+    String? currency,
   }) =>
       _expenseRequest(
         () => http.post(
@@ -873,12 +880,18 @@ class ApiService {
             'description': description,
             'category': ?category,
             'amount': amount,
+            'currency': ?currency,
             'paidBy': paidBy,
             'splitType': splitType,
             'participants': participants,
             'values': ?values,
             'date': ?date?.toIso8601String(),
             if (notes != null && notes.isNotEmpty) 'notes': notes,
+            if (payers != null)
+              'payers': [
+                for (final entry in payers.entries)
+                  {'user': entry.key, 'amount': entry.value},
+              ],
           }),
         ),
         fallbackError: 'Could not save the expense',
@@ -916,6 +929,12 @@ class ApiService {
     Map<String, double>? values,
     DateTime? date,
     String? notes,
+    // Set only when the expense was split between multiple payers — a map
+    // of userId -> amount that userId fronted, summing to [amount].
+    Map<String, double>? payers,
+    // The currency [amount] (and any [values]/[payers] figures) were
+    // entered in, when changed.
+    String? currency,
   }) =>
       _expenseRequest(
         () => http.patch(
@@ -925,12 +944,18 @@ class ApiService {
             'description': ?description,
             'category': ?category,
             'amount': ?amount,
+            'currency': ?currency,
             'paidBy': ?paidBy,
             'participants': ?participants,
             'splitType': ?splitType,
             'values': ?values,
             'date': ?date?.toIso8601String(),
             'notes': ?notes,
+            if (payers != null)
+              'payers': [
+                for (final entry in payers.entries)
+                  {'user': entry.key, 'amount': entry.value},
+              ],
           }),
         ),
         fallbackError: 'Could not update the expense',
@@ -944,5 +969,206 @@ class ApiService {
           headers: _getHeaders(),
         ),
         fallbackError: 'Could not delete the expense',
+      );
+
+  // ---------------------------------------------------------------------
+  // Recurring expenses
+  // ---------------------------------------------------------------------
+
+  /// Shapes a recurring-expense response the same way [_expenseRequest]
+  /// does for plain expenses, just under the `recurringExpense(s)` keys.
+  static Future<Map<String, dynamic>> _recurringRequest(
+    Future<http.Response> Function() send, {
+    String fallbackError = 'Request failed',
+  }) async {
+    try {
+      final response = await send();
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {
+          'success': true,
+          if (data['recurringExpense'] != null)
+            'recurringExpense': Map<String, dynamic>.from(data['recurringExpense']),
+          if (data['recurringExpenses'] is List)
+            'recurringExpenses': (data['recurringExpenses'] as List? ?? [])
+                .whereType<Map<String, dynamic>>()
+                .toList(),
+          'message': ?data['message'],
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? fallbackError,
+        'statusCode': response.statusCode,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// POST /groups/:groupId/recurring-expenses
+  static Future<Map<String, dynamic>> createRecurringExpense({
+    required String groupId,
+    required String description,
+    required double amount,
+    required String paidBy,
+    required List<String> participants,
+    required String frequency,
+    String? category,
+    String splitType = 'equal',
+    Map<String, double>? values,
+    DateTime? startDate,
+    Map<String, double>? payers,
+  }) =>
+      _recurringRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/groups/$groupId/recurring-expenses'),
+          headers: _getHeaders(),
+          body: jsonEncode({
+            'description': description,
+            'category': ?category,
+            'amount': amount,
+            'paidBy': paidBy,
+            'splitType': splitType,
+            'participants': participants,
+            'values': ?values,
+            'frequency': frequency,
+            'startDate': ?startDate?.toIso8601String(),
+            if (payers != null)
+              'payers': [
+                for (final entry in payers.entries)
+                  {'user': entry.key, 'amount': entry.value},
+              ],
+          }),
+        ),
+        fallbackError: 'Could not set up the recurring expense',
+      );
+
+  /// GET /groups/:groupId/recurring-expenses
+  static Future<Map<String, dynamic>> getGroupRecurringExpenses(String groupId) =>
+      _recurringRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/groups/$groupId/recurring-expenses'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not load recurring expenses',
+      );
+
+  /// PATCH /recurring-expenses/:id — used here just to pause/resume
+  /// ([active]) or delete via [deleteRecurringExpense].
+  static Future<Map<String, dynamic>> updateRecurringExpense({
+    required String id,
+    bool? active,
+  }) =>
+      _recurringRequest(
+        () => http.patch(
+          Uri.parse('$baseUrl/recurring-expenses/$id'),
+          headers: _getHeaders(),
+          body: jsonEncode({'active': ?active}),
+        ),
+        fallbackError: 'Could not update the recurring expense',
+      );
+
+  /// DELETE /recurring-expenses/:id
+  static Future<Map<String, dynamic>> deleteRecurringExpense(String id) =>
+      _recurringRequest(
+        () => http.delete(
+          Uri.parse('$baseUrl/recurring-expenses/$id'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not delete the recurring expense',
+      );
+
+  /// GET /groups/:groupId/expenses/export — the server responds with raw
+  /// CSV text (not JSON) on success, so this bypasses [_expenseRequest]'s
+  /// JSON-shaped decoding.
+  static Future<Map<String, dynamic>> exportGroupExpensesCsv(
+    String groupId,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/groups/$groupId/expenses/export'),
+        headers: _getHeaders(),
+      );
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'csv': response.body};
+      }
+      final data = _decode(response);
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not export expenses',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Comments
+  // ---------------------------------------------------------------------
+
+  /// Shapes a comment response — same shared-decode pattern as the other
+  /// `_xRequest` helpers, just under the `comment(s)` keys.
+  static Future<Map<String, dynamic>> _commentRequest(
+    Future<http.Response> Function() send, {
+    String fallbackError = 'Request failed',
+  }) async {
+    try {
+      final response = await send();
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {
+          'success': true,
+          if (data['comment'] != null)
+            'comment': Map<String, dynamic>.from(data['comment']),
+          if (data['comments'] is List)
+            'comments': (data['comments'] as List? ?? [])
+                .whereType<Map<String, dynamic>>()
+                .toList(),
+          'message': ?data['message'],
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? fallbackError,
+        'statusCode': response.statusCode,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /expenses/:expenseId/comments
+  static Future<Map<String, dynamic>> getExpenseComments(String expenseId) =>
+      _commentRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/expenses/$expenseId/comments'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not load comments',
+      );
+
+  /// POST /expenses/:expenseId/comments
+  static Future<Map<String, dynamic>> createComment({
+    required String expenseId,
+    required String text,
+  }) =>
+      _commentRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/expenses/$expenseId/comments'),
+          headers: _getHeaders(),
+          body: jsonEncode({'text': text}),
+        ),
+        fallbackError: 'Could not post the comment',
+      );
+
+  /// DELETE /comments/:id
+  static Future<Map<String, dynamic>> deleteComment(String commentId) =>
+      _commentRequest(
+        () => http.delete(
+          Uri.parse('$baseUrl/comments/$commentId'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not delete the comment',
       );
 }

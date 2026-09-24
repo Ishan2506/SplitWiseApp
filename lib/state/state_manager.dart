@@ -46,6 +46,8 @@ class StateManager extends ChangeNotifier {
   final List<Member> _members = [];
   final List<Group> _groups = [];
   final List<Expense> _expenses = [];
+  final List<RecurringExpense> _recurringExpenses = [];
+  final List<ExpenseComment> _comments = [];
   final List<Payment> _payments = [];
   final List<AppNotification> _notifications = [];
 
@@ -160,6 +162,8 @@ class StateManager extends ChangeNotifier {
   List<Member> get members => _members;
   List<Group> get groups => _groups;
   List<Expense> get expenses => _expenses;
+  List<RecurringExpense> get recurringExpenses => _recurringExpenses;
+  List<ExpenseComment> get comments => _comments;
   List<Payment> get payments => _payments;
   String get currentUserId => _currentUserId;
   bool get isLoggedIn => _isLoggedIn;
@@ -365,6 +369,20 @@ class StateManager extends ChangeNotifier {
         ),
       );
 
+    // A group that no longer comes back here was deleted (or this user was
+    // removed from it) — its expenses should not keep counting toward
+    // History's total or showing up in the list.
+    final liveGroupIds = apiGroups.map((g) => g.id).toSet();
+    final removedExpenseIds = _expenses
+        .where((e) => e.groupId != null && !liveGroupIds.contains(e.groupId))
+        .map((e) => e.id)
+        .toSet();
+    _expenses.removeWhere(
+      (e) => e.groupId != null && !liveGroupIds.contains(e.groupId),
+    );
+    _recurringExpenses.removeWhere((r) => !liveGroupIds.contains(r.groupId));
+    _comments.removeWhere((c) => removedExpenseIds.contains(c.expenseId));
+
     // Add anyone we have not seen before, so member lookups never throw.
     for (final apiGroup in apiGroups) {
       for (final member in apiGroup.members) {
@@ -414,6 +432,11 @@ class StateManager extends ChangeNotifier {
     String? groupId,
     DateTime? date,
     String? notes,
+    // Set only when the expense was split between multiple payers.
+    Map<String, double>? payers,
+    // The currency [amount] was entered in, when different from the
+    // group's own — the server converts and remembers both figures.
+    String? currency,
   }) async {
     if (groupId == null || groupId.isEmpty) {
       addExpense(Expense(
@@ -423,6 +446,7 @@ class StateManager extends ChangeNotifier {
         amount: amount,
         date: date ?? DateTime.now(),
         paidById: paidById,
+        payers: payers,
         splitType: splitType,
         splits: splits,
       ));
@@ -440,6 +464,8 @@ class StateManager extends ChangeNotifier {
       values: values,
       date: date,
       notes: notes,
+      payers: payers,
+      currency: currency,
     );
 
     if (result['success'] == true && result['expense'] != null) {
@@ -471,6 +497,11 @@ class StateManager extends ChangeNotifier {
     Map<String, double>? values,
     DateTime? date,
     String? notes,
+    // Set only when the expense was split between multiple payers.
+    Map<String, double>? payers,
+    // The currency [amount] was entered in, when different from the
+    // group's own.
+    String? currency,
   }) async {
     final result = await ApiService.updateExpense(
       expenseId: expenseId,
@@ -483,6 +514,8 @@ class StateManager extends ChangeNotifier {
       values: values,
       date: date,
       notes: notes,
+      payers: payers,
+      currency: currency,
     );
 
     if (result['success'] == true && result['expense'] != null) {
@@ -511,6 +544,7 @@ class StateManager extends ChangeNotifier {
 
     if (result['success'] == true) {
       _expenses.removeWhere((e) => e.id == expenseId);
+      _comments.removeWhere((c) => c.expenseId == expenseId);
       notifyListeners();
       return {'success': true};
     }
@@ -534,6 +568,155 @@ class StateManager extends ChangeNotifier {
     _expenses.removeWhere((e) => e.groupId == groupId);
     _expenses.addAll(fetched);
     notifyListeners();
+  }
+
+  /// Loads every recurring-expense template set up for a group — active or
+  /// paused, so the management screen can show both.
+  Future<void> loadGroupRecurringExpenses(String groupId) async {
+    final result = await ApiService.getGroupRecurringExpenses(groupId);
+    if (result['success'] != true) return;
+
+    final fetched = (result['recurringExpenses'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(RecurringExpense.fromJson)
+        .toList();
+
+    _recurringExpenses.removeWhere((r) => r.groupId == groupId);
+    _recurringExpenses.addAll(fetched);
+    notifyListeners();
+  }
+
+  /// Sets up a new recurring expense. If its first occurrence is already due
+  /// (the common case — starting "today"), the server creates that first
+  /// real [Expense] immediately, so the caller should refresh the group's
+  /// expenses/balances after this succeeds.
+  Future<Map<String, dynamic>> createRecurringExpense({
+    required String groupId,
+    required String description,
+    required double amount,
+    required String paidById,
+    required List<String> participants,
+    required RecurringFrequency frequency,
+    String? category,
+    SplitType splitType = SplitType.equal,
+    Map<String, double>? values,
+    DateTime? startDate,
+    Map<String, double>? payers,
+  }) async {
+    final result = await ApiService.createRecurringExpense(
+      groupId: groupId,
+      description: description,
+      category: category,
+      amount: amount,
+      paidBy: paidById,
+      participants: participants,
+      splitType: Expense.splitTypeToApi(splitType),
+      values: values,
+      frequency: frequency.api,
+      startDate: startDate,
+      payers: payers,
+    );
+
+    if (result['success'] == true && result['recurringExpense'] != null) {
+      final created = RecurringExpense.fromJson(
+          Map<String, dynamic>.from(result['recurringExpense'] as Map));
+      _recurringExpenses.add(created);
+      notifyListeners();
+      return {'success': true};
+    }
+
+    return {
+      'success': false,
+      'message': result['message'] ?? 'Could not set up the recurring expense',
+    };
+  }
+
+  /// Pauses or resumes a recurring expense — the scheduler skips a paused
+  /// one entirely, and resuming just picks up from where it left off.
+  Future<Map<String, dynamic>> setRecurringExpenseActive(
+      String id, bool active) async {
+    final result = await ApiService.updateRecurringExpense(id: id, active: active);
+
+    if (result['success'] == true && result['recurringExpense'] != null) {
+      final updated = RecurringExpense.fromJson(
+          Map<String, dynamic>.from(result['recurringExpense'] as Map));
+      final index = _recurringExpenses.indexWhere((r) => r.id == id);
+      if (index >= 0) {
+        _recurringExpenses[index] = updated;
+      } else {
+        _recurringExpenses.add(updated);
+      }
+      notifyListeners();
+      return {'success': true};
+    }
+
+    return {
+      'success': false,
+      'message': result['message'] ?? 'Could not update the recurring expense',
+    };
+  }
+
+  Future<Map<String, dynamic>> deleteRecurringExpense(String id) async {
+    final result = await ApiService.deleteRecurringExpense(id);
+
+    if (result['success'] == true) {
+      _recurringExpenses.removeWhere((r) => r.id == id);
+      notifyListeners();
+      return {'success': true};
+    }
+
+    return {
+      'success': false,
+      'message': result['message'] ?? 'Could not delete the recurring expense',
+    };
+  }
+
+  /// Loads an expense's comment thread, replacing whatever was cached for it.
+  Future<void> loadExpenseComments(String expenseId) async {
+    final result = await ApiService.getExpenseComments(expenseId);
+    if (result['success'] != true) return;
+
+    final fetched = (result['comments'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map((json) => ExpenseComment.fromJson(json, expenseId: expenseId))
+        .toList();
+
+    _comments.removeWhere((c) => c.expenseId == expenseId);
+    _comments.addAll(fetched);
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> addComment(String expenseId, String text) async {
+    final result = await ApiService.createComment(expenseId: expenseId, text: text);
+
+    if (result['success'] == true && result['comment'] != null) {
+      _comments.add(ExpenseComment.fromJson(
+        Map<String, dynamic>.from(result['comment'] as Map),
+        expenseId: expenseId,
+      ));
+      notifyListeners();
+      return {'success': true};
+    }
+
+    return {
+      'success': false,
+      'message': result['message'] ?? 'Could not post the comment',
+    };
+  }
+
+  Future<Map<String, dynamic>> deleteComment(String commentId) async {
+    final result = await ApiService.deleteComment(commentId);
+
+    if (result['success'] == true) {
+      _comments.removeWhere((c) => c.id == commentId);
+      notifyListeners();
+      return {'success': true};
+    }
+
+    return {
+      'success': false,
+      'message': result['message'] ?? 'Could not delete the comment',
+    };
   }
 
   void addPayment(Payment payment) {

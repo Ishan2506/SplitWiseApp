@@ -64,10 +64,15 @@ class AddExpenseScreen extends StatefulWidget {
   /// "Save" updates it in place instead of creating a new one.
   final Expense? existingExpense;
 
+  /// Opens the form with "Repeat this expense" already switched on — the
+  /// entry point from the recurring-expenses screen's "New" action.
+  final bool startAsRecurring;
+
   const AddExpenseScreen({
     super.key,
     required this.groupId,
     this.existingExpense,
+    this.startAsRecurring = false,
   });
 
   bool get isEditing => existingExpense != null;
@@ -99,6 +104,25 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   /// re-seeding the fields from the total behind their back.
   bool _customFieldsTouched = false;
 
+  /// True when "who paid" is more than one person — e.g. two cards split a
+  /// restaurant bill. False is the common case: a single payer via
+  /// [_paidById].
+  bool _multiplePayers = false;
+  final Map<String, bool> _payerSelected = {};
+  final Map<String, TextEditingController> _payerAmountControllers = {};
+  bool _seedingPayerFields = false;
+  bool _payerFieldsTouched = false;
+
+  /// Only offered when creating a brand-new expense — an existing one-time
+  /// expense can't retroactively become a recurring template.
+  bool _isRecurring = false;
+  RecurringFrequency _frequency = RecurringFrequency.monthly;
+
+  /// The currency [_amountController] (and every split/payer figure on this
+  /// screen) is being entered in. Defaults to the group's own; the server
+  /// converts automatically when this differs from it.
+  String _currencyCode = kDefaultCurrencyCode;
+
   static const _categories = <String, IconData>{
     'Food & drink': Icons.restaurant_rounded,
     'Travel': Icons.flight_takeoff_rounded,
@@ -112,9 +136,18 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     super.initState();
     final state = Provider.of<StateManager>(context, listen: false);
     final existing = widget.existingExpense;
+    final groupCurrency =
+        Provider.of<GroupProvider>(context, listen: false)
+                .groupById(widget.groupId)
+                ?.currency ??
+            kDefaultCurrencyCode;
 
     if (existing != null) {
-      _amountController.text = existing.amount.toStringAsFixed(2);
+      // Edit in whatever currency it was originally entered in — the
+      // group-currency `amount` is a converted figure, not what was typed.
+      _currencyCode = existing.originalCurrency ?? groupCurrency;
+      _amountController.text =
+          (existing.originalAmount ?? existing.amount).toStringAsFixed(2);
       _titleController.text = existing.description;
       _notesController.text = existing.notes ?? '';
       _selectedCategory =
@@ -123,12 +156,41 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       _splitType = existing.splitType;
       _paidById = existing.paidById;
     } else {
+      _currencyCode = groupCurrency;
       _paidById = state.currentUserId;
+      _isRecurring = widget.startAsRecurring;
     }
 
     _updateSelectedMembersForGroup(state);
 
-    if (existing != null) _applyExistingSplits(existing);
+    if (existing != null) {
+      _applyExistingSplits(existing);
+      _applyExistingPayers(existing);
+    }
+  }
+
+  /// Prefills the "paid by" section from a previously saved expense. Most
+  /// expenses have a single payer and this is a no-op beyond what
+  /// [_updateSelectedMembersForGroup] already set; a multi-payer expense
+  /// switches the form into split-payment mode with each contributor's
+  /// real amount.
+  void _applyExistingPayers(Expense existing) {
+    if (!existing.hasMultiplePayers) return;
+
+    _multiplePayers = true;
+    for (final id in _payerSelected.keys.toList()) {
+      _payerSelected[id] = existing.payers.containsKey(id);
+    }
+
+    _seedingPayerFields = true;
+    for (final entry in existing.payers.entries) {
+      final field = _payerAmountControllers[entry.key];
+      if (field == null) continue;
+      field.text = entry.value.toStringAsFixed(2);
+    }
+    _seedingPayerFields = false;
+
+    _payerFieldsTouched = true;
   }
 
   /// Prefills who is in the split and each person's figure from a previously
@@ -159,9 +221,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   /// An expense is always in its group's currency. The server-backed group
   /// carries that, so it is read from GroupProvider rather than the lighter
   /// in-memory group held by StateManager.
-  String get _symbol =>
-      context.read<GroupProvider>().groupById(widget.groupId)?.currencySymbol ??
-      currencySymbolFor(null);
+  /// Every figure on this screen — amount, split shares, payer amounts — is
+  /// entered and previewed in [_currencyCode], not necessarily the group's
+  /// own; the server converts once this is saved.
+  String get _symbol => currencySymbolFor(_currencyCode);
 
   void _updateSelectedMembersForGroup(StateManager state) {
     final grp = state.groups.where((g) => g.id == widget.groupId).firstOrNull;
@@ -187,9 +250,80 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           : (memberIds.isNotEmpty ? memberIds.first : null);
     }
 
+    _payerSelected.clear();
+    for (final controller in _payerAmountControllers.values) {
+      controller.dispose();
+    }
+    _payerAmountControllers.clear();
+    for (final mId in memberIds) {
+      _payerSelected[mId] = mId == _paidById;
+      _payerAmountControllers[mId] = TextEditingController();
+    }
+    _payerFieldsTouched = false;
+    _seedPayerFields();
+
     _customFieldsTouched = false;
     _seedCustomFields();
   }
+
+  /// Fills the payer amount fields with an even share of the current total
+  /// across whoever is currently marked as a payer — a sane starting point
+  /// the user can adjust, mirroring how [_seedCustomFields] seeds splits.
+  void _seedPayerFields() {
+    if (_payerFieldsTouched) return;
+
+    final ids =
+        _payerSelected.entries.where((e) => e.value).map((e) => e.key).toList();
+    _seedingPayerFields = true;
+    for (final entry in _payerAmountControllers.entries) {
+      final isSelected = _payerSelected[entry.key] ?? false;
+      if (!isSelected || ids.isEmpty) {
+        entry.value.text = '';
+        continue;
+      }
+      final share = _amount / ids.length;
+      entry.value.text = _amount <= 0 ? '' : share.toStringAsFixed(2);
+    }
+    _seedingPayerFields = false;
+  }
+
+  void _onPayerToggled(String id, bool value) {
+    setState(() {
+      _payerSelected[id] = value;
+      if (!value) {
+        _seedingPayerFields = true;
+        _payerAmountControllers[id]?.text = '';
+        _seedingPayerFields = false;
+      }
+      _seedPayerFields();
+    });
+  }
+
+  void _onPayerAmountChanged() {
+    if (_seedingPayerFields) return;
+    setState(() => _payerFieldsTouched = true);
+  }
+
+  void _resetPayerFields() {
+    setState(() {
+      _payerFieldsTouched = false;
+      _seedPayerFields();
+    });
+  }
+
+  List<String> get _selectedPayerIds => _multiplePayers
+      ? _payerSelected.entries.where((e) => e.value).map((e) => e.key).toList()
+      : (_paidById != null ? [_paidById!] : const []);
+
+  double get _payersAssigned => _selectedPayerIds.fold<double>(
+        0,
+        (sum, id) =>
+            sum +
+            (double.tryParse(_payerAmountControllers[id]?.text.trim() ?? '') ??
+                0),
+      );
+
+  double get _payersRemainder => _amount - _payersAssigned;
 
   /// Fills the custom-split fields with the even share of the current total,
   /// so switching to "Exact"/"Percentage" starts from a balanced split rather
@@ -252,9 +386,34 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
-    if (_paidById == null) {
+    if (!_multiplePayers && _paidById == null) {
       showAppSnack(context, 'Choose who paid', success: false);
       return;
+    }
+
+    final selectedPayers = _selectedPayerIds;
+    if (_multiplePayers) {
+      if (selectedPayers.isEmpty) {
+        showAppSnack(context, 'Choose who paid', success: false);
+        return;
+      }
+      for (final id in selectedPayers) {
+        final raw = _payerAmountControllers[id]?.text.trim() ?? '';
+        final parsed = double.tryParse(raw);
+        if (raw.isEmpty || parsed == null || parsed <= 0) {
+          showAppSnack(context, 'Give each payer a valid amount',
+              success: false);
+          return;
+        }
+      }
+      if (_payersRemainder.abs() > 0.01) {
+        showAppSnack(
+          context,
+          'Payer amounts must add up to ${formatMoney(_amount, symbol: _symbol)}',
+          success: false,
+        );
+        return;
+      }
     }
 
     if (_splitType != SplitType.equal) {
@@ -303,6 +462,19 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         : _customValues(selectedSplitMembers);
     final notes = _notesController.text.trim();
 
+    // The server only needs a `payers` breakdown when it is more than one
+    // person; the primary payer (whoever fronted the most) still goes in
+    // `paidById` for every place that only shows a single "paid by" name.
+    final payersMap = _multiplePayers
+        ? {
+            for (final id in selectedPayers)
+              id: double.parse(_payerAmountControllers[id]!.text.trim()),
+          }
+        : null;
+    final primaryPayerId = _multiplePayers
+        ? payersMap!.entries.reduce((a, b) => b.value > a.value ? b : a).key
+        : _paidById!;
+
     try {
       final result = widget.isEditing
           ? await state.updateExpense(
@@ -310,26 +482,43 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               description: description,
               category: _selectedCategory,
               amount: amount,
-              paidById: _paidById!,
+              paidById: primaryPayerId,
+              payers: payersMap,
               splitType: _splitType,
               participants: selectedSplitMembers,
               values: values,
               date: _selectedDate,
               notes: notes,
+              currency: _currencyCode,
             )
-          : await state.saveExpense(
-              description: description,
-              category: _selectedCategory,
-              amount: amount,
-              paidById: _paidById!,
-              splitType: _splitType,
-              participants: selectedSplitMembers,
-              splits: _calculateSplits(amount, selectedSplitMembers),
-              values: values,
-              groupId: widget.groupId,
-              date: _selectedDate,
-              notes: notes,
-            );
+          : _isRecurring
+              ? await state.createRecurringExpense(
+                  groupId: widget.groupId,
+                  description: description,
+                  category: _selectedCategory,
+                  amount: amount,
+                  paidById: primaryPayerId,
+                  payers: payersMap,
+                  splitType: _splitType,
+                  participants: selectedSplitMembers,
+                  values: values,
+                  frequency: _frequency,
+                  startDate: _selectedDate,
+                )
+              : await state.saveExpense(
+                  description: description,
+                  category: _selectedCategory,
+                  amount: amount,
+                  paidById: primaryPayerId,
+                  payers: payersMap,
+                  splitType: _splitType,
+                  participants: selectedSplitMembers,
+                  splits: _calculateSplits(amount, selectedSplitMembers),
+                  values: values,
+                  groupId: widget.groupId,
+                  date: _selectedDate,
+                  notes: notes,
+                );
 
       if (!mounted) return;
 
@@ -344,16 +533,32 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         return;
       }
 
+      if (_isRecurring && !widget.isEditing) {
+        // The server may have already created the first occurrence (a
+        // start date of today is due immediately) — pick it up so it shows
+        // in the group right away instead of waiting for a manual refresh.
+        await state.loadGroupExpenses(widget.groupId);
+        if (!mounted) return;
+        context.read<GroupProvider>().refreshGroup(widget.groupId);
+      }
+
       state.pushNotification(
         kind: ActivityKind.expenseAdded,
-        title:
-            'You ${widget.isEditing ? 'updated' : 'added'} "$description"',
+        title: _isRecurring && !widget.isEditing
+            ? 'You set up "$description" to repeat ${_frequency.label.toLowerCase()}'
+            : 'You ${widget.isEditing ? 'updated' : 'added'} "$description"',
         subtitle:
             '${formatMoney(amount, symbol: symbol)} · split ${selectedSplitMembers.length} ways',
       );
 
       showAppSnack(
-          context, widget.isEditing ? 'Expense updated' : 'Expense saved');
+        context,
+        widget.isEditing
+            ? 'Expense updated'
+            : _isRecurring
+                ? 'Recurring expense set up'
+                : 'Expense saved',
+      );
 
       if (widget.isEditing) {
         // An edit is reached through Group -> Expense detail -> here; after
@@ -477,6 +682,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     for (final controller in _customAmountControllers.values) {
       controller.dispose();
     }
+    for (final controller in _payerAmountControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -497,13 +705,16 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
     final group =
         state.groups.where((g) => g.id == widget.groupId).firstOrNull;
-    // The expense is entered in the group's currency, which only the
-    // server-backed group knows about.
-    final symbol = context
+    // Every figure on this screen previews in whatever currency is
+    // currently selected, which may not be the group's own — the server
+    // converts on save. The group's currency is only needed for the
+    // "converts to ..." note below the picker.
+    final symbol = _symbol;
+    final groupCurrencyCode = context
             .watch<GroupProvider>()
             .groupById(widget.groupId)
-            ?.currencySymbol ??
-        currencySymbolFor(null);
+            ?.currency ??
+        kDefaultCurrencyCode;
     // Before the group loads we do not know its roster, so fall back to
     // everyone rather than showing an empty split list.
     final activeMembers = group != null
@@ -551,8 +762,37 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   _AmountField(
                     controller: _amountController,
                     currencySymbol: symbol,
-                    onChanged: (_) => setState(_seedCustomFields),
+                    onChanged: (_) => setState(() {
+                      _seedCustomFields();
+                      _seedPayerFields();
+                    }),
                   ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Center(
+                    child: IgnorePointer(
+                      ignoring: _isRecurring,
+                      child: Opacity(
+                        opacity: _isRecurring ? 0.5 : 1,
+                        child: _CurrencyPicker(
+                          selected: _currencyCode,
+                          onChanged: (code) => setState(() => _currencyCode = code),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_currencyCode != groupCurrencyCode) ...[
+                    const SizedBox(height: 4),
+                    Center(
+                      child: Text(
+                        'Converts to ${currencySymbolFor(groupCurrencyCode)} '
+                        '($groupCurrencyCode) when saved',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.lg),
 
                   PSTextField(
@@ -575,28 +815,69 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   ),
                   const SizedBox(height: AppSpacing.md),
 
+                  _PickerField(
+                    label: 'Date',
+                    value: _formatDate(_selectedDate),
+                    icon: Icons.calendar_today_rounded,
+                    onTap: _pickDate,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: _PickerField(
-                          label: 'Date',
-                          value: _formatDate(_selectedDate),
-                          icon: Icons.calendar_today_rounded,
-                          onTap: _pickDate,
+                      const Expanded(child: _FieldLabel('Paid by')),
+                      if (activeMembers.length > 1)
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            if (_multiplePayers) {
+                              _multiplePayers = false;
+                            } else {
+                              _multiplePayers = true;
+                              _payerFieldsTouched = false;
+                              _seedPayerFields();
+                            }
+                          }),
+                          child: Text(
+                            _multiplePayers
+                                ? 'Paid by one person'
+                                : 'Split payment',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primaryDark,
+                              decoration: TextDecoration.underline,
+                              decorationColor: AppColors.primaryDark,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: AppSpacing.xs),
-                      Expanded(
-                        child: _PickerField(
-                          label: 'Paid by',
-                          value: _payerName(activeMembers),
-                          icon: Icons.account_balance_wallet_outlined,
-                          onTap: () => _pickPayer(activeMembers),
-                        ),
-                      ),
                     ],
                   ),
+                  const SizedBox(height: AppSpacing.xs),
+                  if (!_multiplePayers)
+                    _TappableField(
+                      value: _payerName(activeMembers),
+                      icon: Icons.account_balance_wallet_outlined,
+                      onTap: () => _pickPayer(activeMembers),
+                    )
+                  else ...[
+                    _PayerList(
+                      members: activeMembers,
+                      selected: _payerSelected,
+                      controllers: _payerAmountControllers,
+                      currencySymbol: symbol,
+                      onToggle: _onPayerToggled,
+                      onAmountChanged: _onPayerAmountChanged,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    _RemainderBar(
+                      remainder: _payersRemainder,
+                      total: _amount,
+                      isPercentage: false,
+                      currencySymbol: symbol,
+                      onReset: _resetPayerFields,
+                      balancedNoun: 'Payments',
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.xl),
 
                   const SectionHeader(title: 'Split'),
@@ -628,6 +909,35 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     ),
                   ],
 
+                  if (!widget.isEditing) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    _RepeatToggle(
+                      isRecurring: _isRecurring,
+                      frequency: _frequency,
+                      onChanged: (value) => setState(() {
+                        _isRecurring = value;
+                        // Recurring templates always post in the group's own
+                        // currency — switching one on while a different
+                        // currency is selected would silently record every
+                        // future occurrence at the wrong amount.
+                        if (value) _currencyCode = groupCurrencyCode;
+                      }),
+                      onFrequencyChanged: (f) => setState(() => _frequency = f),
+                    ),
+                    if (_isRecurring)
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
+                        child: Text(
+                          'Recurring expenses always post in the group\'s '
+                          'own currency ($groupCurrencyCode).',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ),
+                  ],
+
                   const SizedBox(height: AppSpacing.lg),
                   PSTextField(
                     label: 'Notes (optional)',
@@ -637,7 +947,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   PSButton(
-                    label: widget.isEditing ? 'Update expense' : 'Save expense',
+                    label: widget.isEditing
+                        ? 'Update expense'
+                        : _isRecurring
+                            ? 'Set up recurring expense'
+                            : 'Save expense',
                     onPressed: _isSaving ? null : _saveExpense,
                     isLoading: _isSaving,
                   ),
@@ -905,6 +1219,338 @@ class _PickerField extends StatelessWidget {
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// A tappable field that opens a picker sheet, without its own label —
+/// the label sits above it separately (used where a link needs to share
+/// that label row, e.g. "Paid by" next to "Split payment").
+/// A small "USD ▾" chip under the amount field — tapping opens the same
+/// currency list the group and profile currency pickers use.
+class _CurrencyPicker extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  const _CurrencyPicker({required this.selected, required this.onChanged});
+
+  Future<void> _pick(BuildContext context) async {
+    final code = await showModalBottomSheet<String?>(
+      context: context,
+      builder: (sheetContext) => _OptionSheet(
+        title: 'Currency',
+        options: [
+          for (final c in kCurrencies)
+            _Option(
+              id: c.code,
+              label: '${c.code} — ${c.name} (${c.symbol})',
+              icon: Icons.currency_exchange_rounded,
+            ),
+        ],
+        selectedId: selected,
+      ),
+    );
+    if (code != null) onChanged(code);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _pick(context),
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.bgSubtle,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              selected,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 2),
+            const Icon(Icons.expand_more_rounded,
+                size: 14, color: AppColors.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TappableField extends StatelessWidget {
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _TappableField({
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.inputBg,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 17, color: AppColors.muted),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              const Icon(Icons.expand_more_rounded,
+                  size: 18, color: AppColors.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Who fronted the money when an expense was split between multiple
+/// payers, with each contributor's amount editable — the payer-side
+/// counterpart to [_SplitList]'s exact-amount mode.
+class _PayerList extends StatelessWidget {
+  final List<Member> members;
+  final Map<String, bool> selected;
+  final Map<String, TextEditingController> controllers;
+  final String currencySymbol;
+  final void Function(String id, bool value) onToggle;
+  final VoidCallback onAmountChanged;
+
+  const _PayerList({
+    required this.members,
+    required this.selected,
+    required this.controllers,
+    required this.currencySymbol,
+    required this.onToggle,
+    required this.onAmountChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bgPrimary,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+        boxShadow: AppShadow.card,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (var i = 0; i < members.length; i++) ...[
+            _row(members[i]),
+            if (i != members.length - 1)
+              const Padding(
+                padding: EdgeInsets.only(left: 58),
+                child: Divider(height: 1),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _row(Member member) {
+    final isOn = selected[member.id] ?? false;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onToggle(member.id, !isOn),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+          child: Row(
+            children: [
+              Checkbox(
+                value: isOn,
+                onChanged: (v) => onToggle(member.id, v ?? false),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6)),
+                side: const BorderSide(color: AppColors.borderStrong, width: 1.5),
+                activeColor: AppColors.primaryAccent,
+                visualDensity: VisualDensity.compact,
+              ),
+              AvatarWidget.forName(member.name, size: 32),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  member.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: isOn ? AppColors.textPrimary : AppColors.muted,
+                  ),
+                ),
+              ),
+              if (!isOn)
+                const Text(
+                  '—',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.muted,
+                  ),
+                )
+              else
+                SizedBox(
+                  width: 96,
+                  child: TextField(
+                    controller: controllers[member.id],
+                    onChanged: (_) => onAmountChanged(),
+                    textAlign: TextAlign.right,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d{0,2}')),
+                    ],
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      prefixText: currencySymbol,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 10),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Make this repeat" — a switch that reveals a frequency picker once on,
+/// only ever shown when creating a brand-new expense.
+class _RepeatToggle extends StatelessWidget {
+  final bool isRecurring;
+  final RecurringFrequency frequency;
+  final ValueChanged<bool> onChanged;
+  final ValueChanged<RecurringFrequency> onFrequencyChanged;
+
+  const _RepeatToggle({
+    required this.isRecurring,
+    required this.frequency,
+    required this.onChanged,
+    required this.onFrequencyChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.repeat_rounded, size: 18, color: AppColors.muted),
+            const SizedBox(width: AppSpacing.xs),
+            const Expanded(
+              child: Text(
+                'Repeat this expense',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            // Plain Switch(), no color overrides — the app's shared
+            // SwitchThemeData already gives it the same look as the "Push
+            // notifications" switch on the Profile screen.
+            Switch(
+              value: isRecurring,
+              onChanged: onChanged,
+            ),
+          ],
+        ),
+        if (isRecurring) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: AppColors.bgSubtle,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+            ),
+            child: Row(
+              children: [
+                for (final f in RecurringFrequency.values)
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => onFrequencyChanged(f),
+                      child: AnimatedContainer(
+                        duration: AppDuration.fast,
+                        height: 34,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: f == frequency
+                              ? AppColors.bgPrimary
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          boxShadow: f == frequency ? AppShadow.card : null,
+                        ),
+                        child: Text(
+                          f.label,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: f == frequency
+                                ? AppColors.textPrimary
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'First charge on the date above, then every ${frequency.label.toLowerCase()}.',
+            style: const TextStyle(fontSize: 12, color: AppColors.textTertiary),
+          ),
+        ],
       ],
     );
   }
@@ -1206,12 +1852,17 @@ class _RemainderBar extends StatelessWidget {
   final String currencySymbol;
   final VoidCallback onReset;
 
+  /// What "add up to X" is balancing — "Splits" for the split section,
+  /// "Payments" for the multi-payer section.
+  final String balancedNoun;
+
   const _RemainderBar({
     required this.remainder,
     required this.total,
     required this.isPercentage,
     required this.currencySymbol,
     required this.onReset,
+    this.balancedNoun = 'Splits',
   });
 
   /// Formats a leftover/overshoot in the unit the current split uses.
@@ -1249,7 +1900,7 @@ class _RemainderBar extends StatelessWidget {
               balanced
                   ? (isPercentage
                       ? 'Percentages add up to 100%'
-                      : 'Splits add up to ${formatMoney(total, symbol: currencySymbol)}')
+                      : '$balancedNoun add up to ${formatMoney(total, symbol: currencySymbol)}')
                   : over
                       ? '${_unit(remainder.abs())} over'
                       : '${_unit(remainder)} left to assign',
