@@ -166,7 +166,32 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     if (existing != null) {
       _applyExistingSplits(existing);
       _applyExistingPayers(existing);
+    } else {
+      _applyGroupDefaultSplit();
     }
+  }
+
+  /// Starts a brand-new expense from the group's remembered split ratio
+  /// (set on the Default Split screen), if one exists — still just a
+  /// starting point the user can adjust before saving. Falls back to the
+  /// ordinary even split if membership has changed since the default was
+  /// set, rather than silently leaving someone out.
+  void _applyGroupDefaultSplit() {
+    final defaultSplit = Provider.of<GroupProvider>(context, listen: false)
+        .groupById(widget.groupId)
+        ?.defaultSplit;
+    if (defaultSplit == null || defaultSplit.isEmpty) return;
+
+    final ids = _selectedMemberIds;
+    if (ids.isEmpty || ids.any((id) => !defaultSplit.containsKey(id))) return;
+
+    _splitType = SplitType.percentage;
+    _seedingCustomFields = true;
+    for (final id in ids) {
+      _customAmountControllers[id]?.text = defaultSplit[id]!.toStringAsFixed(2);
+    }
+    _seedingCustomFields = false;
+    _customFieldsTouched = true;
   }
 
   /// Prefills the "paid by" section from a previously saved expense. Most

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../model/group_model.dart';
@@ -322,6 +323,12 @@ class ExpenseDetailScreen extends StatelessWidget {
                 ],
 
                 const SizedBox(height: AppSpacing.lg),
+                _ReceiptSection(
+                  expenseId: expense.id,
+                  receiptUrl: expense.receiptUrl,
+                ),
+
+                const SizedBox(height: AppSpacing.lg),
                 const SectionHeader(title: 'Comments'),
                 _CommentsSection(
                   expenseId: expense.id,
@@ -331,6 +338,249 @@ class ExpenseDetailScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The bill/receipt photo attached to an expense: a thumbnail that opens
+/// full-screen when there is one, or a prompt to add one when there isn't.
+/// Any group member can attach or replace it, matching who can edit the
+/// expense itself.
+class _ReceiptSection extends StatefulWidget {
+  final String expenseId;
+  final String receiptUrl;
+
+  const _ReceiptSection({required this.expenseId, required this.receiptUrl});
+
+  @override
+  State<_ReceiptSection> createState() => _ReceiptSectionState();
+}
+
+class _ReceiptSectionState extends State<_ReceiptSection> {
+  bool _busy = false;
+
+  Future<void> _pick() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 85,
+      );
+      if (picked == null || !mounted) return;
+
+      setState(() => _busy = true);
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+
+      final result = await context.read<StateManager>().uploadExpenseReceipt(
+            expenseId: widget.expenseId,
+            bytes: bytes,
+            filename: picked.name,
+          );
+      if (!mounted) return;
+      if (result['success'] != true) {
+        showAppSnack(
+          context,
+          (result['message'] ?? 'Could not upload the receipt').toString(),
+          success: false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        showAppSnack(context, 'Could not upload the receipt: $e', success: false);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _confirmRemove() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove this receipt?'),
+        content: const Text('The photo will be deleted. This cannot be undone.'),
+        actionsPadding: const EdgeInsets.fromLTRB(
+            AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            style:
+                TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
+            child: const Text('Cancel'),
+          ),
+          PSButton(
+            label: 'Remove',
+            variant: PSButtonVariant.danger,
+            size: PSButtonSize.small,
+            expand: false,
+            onPressed: () => Navigator.pop(dialogContext, true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    final result =
+        await context.read<StateManager>().deleteExpenseReceipt(widget.expenseId);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (result['success'] != true) {
+      showAppSnack(
+        context,
+        (result['message'] ?? 'Could not remove the receipt').toString(),
+        success: false,
+      );
+    }
+  }
+
+  void _viewFullScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _ReceiptViewer(url: widget.receiptUrl),
+        fullscreenDialog: true,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionHeader(title: 'Receipt'),
+        const SizedBox(height: AppSpacing.xs),
+        if (widget.receiptUrl.isEmpty)
+          PSCard(
+            child: InkWell(
+              onTap: _busy ? null : _pick,
+              child: Row(
+                children: [
+                  const Icon(Icons.add_a_photo_outlined,
+                      color: AppColors.primaryAccent),
+                  const SizedBox(width: AppSpacing.xs),
+                  const Expanded(
+                    child: Text(
+                      'Add a receipt photo',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  if (_busy)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
+              ),
+            ),
+          )
+        else
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: Stack(
+              children: [
+                GestureDetector(
+                  onTap: _viewFullScreen,
+                  child: Image.network(
+                    widget.receiptUrl,
+                    height: 180,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, progress) =>
+                        progress == null
+                            ? child
+                            : const SizedBox(
+                                height: 180,
+                                child: Center(child: CircularProgressIndicator()),
+                              ),
+                    errorBuilder: (context, error, stack) => Container(
+                      height: 180,
+                      color: AppColors.bgSubtle,
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.broken_image_outlined,
+                          color: AppColors.muted),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Material(
+                    color: Colors.black54,
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      tooltip: 'Remove receipt',
+                      icon: _busy
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.close_rounded,
+                              color: Colors.white, size: 18),
+                      onPressed: _busy ? null : _confirmRemove,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Full-screen, pinch-to-zoom view of a receipt photo.
+class _ReceiptViewer extends StatelessWidget {
+  final String url;
+
+  const _ReceiptViewer({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          child: Image.network(url),
+        ),
       ),
     );
   }

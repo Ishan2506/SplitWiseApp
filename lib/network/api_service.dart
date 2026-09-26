@@ -11,7 +11,7 @@ class ApiService {
   // Physical Android phone: use the PC's LAN IP (phone + PC on same Wi-Fi).
   // Emulator would use 10.0.2.2; web/desktop uses localhost.
   static const String _defaultBaseUrl = kIsWeb
-      ? 'http://103.212.121.139:7000/api' //http://localhost:9856/api
+      ? 'http://localhost:9856/api' //http://localhost:9856/api
       : 'http://103.212.121.139:7000/api';
 
   /// Points the client at a different host. Tests set this to a local stub
@@ -531,6 +531,30 @@ class ApiService {
         fallbackError: 'Could not update the group',
       );
 
+  /// PATCH /groups/:id/default-split — a remembered split ratio so a new
+  /// expense in this group starts from it instead of an even split.
+  /// [splits] maps memberId -> percentage (must sum to 100); pass null to
+  /// clear it back to "no default".
+  static Future<Map<String, dynamic>> setDefaultSplit({
+    required String groupId,
+    Map<String, double>? splits,
+  }) =>
+      _groupRequest(
+        () => http.patch(
+          Uri.parse('$baseUrl/groups/$groupId/default-split'),
+          headers: _getHeaders(),
+          body: jsonEncode({
+            'splits': splits == null
+                ? null
+                : [
+                    for (final entry in splits.entries)
+                      {'user': entry.key, 'percentage': entry.value},
+                  ],
+          }),
+        ),
+        fallbackError: 'Could not update the default split',
+      );
+
   /// DELETE /groups/:id
   static Future<Map<String, dynamic>> deleteGroup(String groupId) async {
     try {
@@ -662,18 +686,21 @@ class ApiService {
         fallbackError: 'Could not remove the member',
       );
 
-  /// POST /groups/:id/invites — invite by email. People who already have an
-  /// account are added immediately; everyone else is emailed the invite code
-  /// and stays pending until they join through the link or QR code.
+  /// POST /groups/:id/invites — invite by email or mobile number. People who
+  /// already have an account are added immediately; everyone else stays
+  /// pending until they join through the link, QR code, or (for a phone
+  /// invite, since there is no SMS provider) once they sign up with a
+  /// matching number.
   static Future<Map<String, dynamic>> inviteToGroup({
     required String groupId,
-    required String email,
+    String? email,
+    String? mobileNumber,
   }) =>
       _groupRequest(
         () => http.post(
           Uri.parse('$baseUrl/groups/$groupId/invites'),
           headers: _getHeaders(),
-          body: jsonEncode({'email': email}),
+          body: jsonEncode({'email': ?email, 'mobileNumber': ?mobileNumber}),
         ),
         fallbackError: 'Could not send the invite',
       );
@@ -969,6 +996,61 @@ class ApiService {
           headers: _getHeaders(),
         ),
         fallbackError: 'Could not delete the expense',
+      );
+
+  /// POST /expenses/:id/receipt (multipart/form-data, field name: "receipt")
+  static Future<Map<String, dynamic>> uploadExpenseReceipt({
+    required String expenseId,
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/expenses/$expenseId/receipt'),
+      );
+      // Not _getHeaders(): that sets a JSON content type, which would break
+      // the multipart boundary.
+      if (_token != null) {
+        request.headers['Authorization'] = 'Bearer $_token';
+      }
+      request.headers['Accept'] = 'application/json';
+      request.files.add(http.MultipartFile.fromBytes(
+        'receipt',
+        bytes,
+        filename: filename,
+        contentType: _mediaTypeFor(filename),
+      ));
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+      final data = _decode(response);
+
+      if (_ok(response.statusCode)) {
+        return {
+          'success': true,
+          'expense': Map<String, dynamic>.from(data['expense']),
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not upload the receipt',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// DELETE /expenses/:id/receipt
+  static Future<Map<String, dynamic>> deleteExpenseReceipt(
+    String expenseId,
+  ) =>
+      _expenseRequest(
+        () => http.delete(
+          Uri.parse('$baseUrl/expenses/$expenseId/receipt'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not remove the receipt',
       );
 
   // ---------------------------------------------------------------------

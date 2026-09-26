@@ -555,6 +555,50 @@ class StateManager extends ChangeNotifier {
     };
   }
 
+  /// Attaches (or replaces) an expense's receipt photo and refreshes the
+  /// local copy from the server's response.
+  Future<Map<String, dynamic>> uploadExpenseReceipt({
+    required String expenseId,
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final result = await ApiService.uploadExpenseReceipt(
+      expenseId: expenseId,
+      bytes: bytes,
+      filename: filename,
+    );
+    return _applyExpenseReceiptResult(expenseId, result, 'Could not upload the receipt');
+  }
+
+  Future<Map<String, dynamic>> deleteExpenseReceipt(String expenseId) async {
+    final result = await ApiService.deleteExpenseReceipt(expenseId);
+    return _applyExpenseReceiptResult(expenseId, result, 'Could not remove the receipt');
+  }
+
+  Map<String, dynamic> _applyExpenseReceiptResult(
+    String expenseId,
+    Map<String, dynamic> result,
+    String fallbackMessage,
+  ) {
+    if (result['success'] == true && result['expense'] != null) {
+      final updated = Expense.fromJson(
+          Map<String, dynamic>.from(result['expense'] as Map));
+      final index = _expenses.indexWhere((e) => e.id == expenseId);
+      if (index >= 0) {
+        _expenses[index] = updated;
+      } else {
+        _expenses.add(updated);
+      }
+      notifyListeners();
+      return {'success': true};
+    }
+
+    return {
+      'success': false,
+      'message': result['message'] ?? fallbackMessage,
+    };
+  }
+
   /// Replaces the locally held expenses for a group with the server's copy.
   Future<void> loadGroupExpenses(String groupId) async {
     final result = await ApiService.getGroupExpenses(groupId);

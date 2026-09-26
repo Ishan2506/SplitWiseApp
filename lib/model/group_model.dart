@@ -208,6 +208,11 @@ class GroupModel {
   final GroupInvite? invite;
   final DateTime? updatedAt;
 
+  /// A remembered split ratio (userId -> percentage, summing to 100), so a
+  /// new expense in this group can start from it instead of an even split.
+  /// Null means no default is set.
+  final Map<String, double>? defaultSplit;
+
   const GroupModel({
     required this.id,
     required this.name,
@@ -222,6 +227,7 @@ class GroupModel {
     this.pendingInvites = const [],
     this.invite,
     this.updatedAt,
+    this.defaultSplit,
   });
 
   factory GroupModel.fromJson(Map<String, dynamic> json) {
@@ -260,7 +266,23 @@ class GroupModel {
       updatedAt: json['updatedAt'] != null
           ? DateTime.tryParse(json['updatedAt'])
           : null,
+      defaultSplit: _defaultSplitFrom(json['defaultSplit']),
     );
+  }
+
+  static Map<String, double>? _defaultSplitFrom(dynamic raw) {
+    if (raw is! List || raw.isEmpty) return null;
+    final map = <String, double>{};
+    for (final entry in raw) {
+      if (entry is! Map) continue;
+      final user = entry['user'];
+      final id = user is Map
+          ? (user['_id'] ?? user['id'] ?? '').toString()
+          : (user ?? '').toString();
+      if (id.isEmpty) continue;
+      map[id] = (entry['percentage'] as num?)?.toDouble() ?? 0.0;
+    }
+    return map.isEmpty ? null : map;
   }
 
   bool isCreatedBy(String userId) => createdById == userId;
@@ -268,6 +290,8 @@ class GroupModel {
   bool hasMember(String userId) => members.any((m) => m.id == userId);
 
   bool get hasBalanceLimit => balanceLimit > 0;
+
+  bool get hasDefaultSplit => defaultSplit != null && defaultSplit!.isNotEmpty;
 
   /// The currency symbol used throughout the group's screens. Resolved from
   /// the shared catalogue so this and the currency picker never disagree.

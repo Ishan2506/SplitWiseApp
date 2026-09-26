@@ -27,6 +27,7 @@ class _InviteScreenState extends State<InviteScreen> {
   final _contactController = TextEditingController();
   bool _sendingInvite = false;
   bool _busyWithCode = false;
+  bool _invitingByPhone = false;
 
   @override
   void initState() {
@@ -126,16 +127,22 @@ class _InviteScreenState extends State<InviteScreen> {
     final raw = _contactController.text.trim();
     if (raw.isEmpty) return;
 
-    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(raw)) {
+    if (_invitingByPhone) {
+      final digits = raw.replaceAll(RegExp(r'[^\d]'), '');
+      if (digits.length < 10) {
+        showGroupSnack(context, 'Enter a valid mobile number', success: false);
+        return;
+      }
+    } else if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(raw)) {
       showGroupSnack(context, 'Enter a valid email address', success: false);
       return;
     }
 
     setState(() => _sendingInvite = true);
-    final result = await context.read<GroupProvider>().inviteByEmail(
-          groupId: group.id,
-          email: raw,
-        );
+    final provider = context.read<GroupProvider>();
+    final result = _invitingByPhone
+        ? await provider.inviteByPhone(groupId: group.id, mobileNumber: raw)
+        : await provider.inviteByEmail(groupId: group.id, email: raw);
     if (!mounted) return;
     setState(() => _sendingInvite = false);
 
@@ -237,13 +244,28 @@ class _InviteScreenState extends State<InviteScreen> {
                 ],
                 const SizedBox(height: AppSpacing.xl),
 
-                const SectionHeader(
-                  title: 'Invite by email',
-                  subtitle: 'We will email them a link and the invite code',
+                SectionHeader(
+                  title: _invitingByPhone
+                      ? 'Invite by phone number'
+                      : 'Invite by email',
+                  subtitle: _invitingByPhone
+                      ? "They're not on the app yet? Share the link or code "
+                          'yourself once this is saved.'
+                      : 'We will email them a link and the invite code',
                 ),
+                const SizedBox(height: AppSpacing.xs),
+                _InviteMethodToggle(
+                  byPhone: _invitingByPhone,
+                  onChanged: (byPhone) => setState(() {
+                    _invitingByPhone = byPhone;
+                    _contactController.clear();
+                  }),
+                ),
+                const SizedBox(height: AppSpacing.sm),
                 _ContactInvite(
                   controller: _contactController,
                   sending: _sendingInvite,
+                  byPhone: _invitingByPhone,
                   onSend: () => _sendInvite(group),
                 ),
 
@@ -512,14 +534,69 @@ class _CodeControls extends StatelessWidget {
   }
 }
 
+/// Equal-width Email / Phone segmented control, same visual language as the
+/// split-type toggle on Add Expense.
+class _InviteMethodToggle extends StatelessWidget {
+  final bool byPhone;
+  final ValueChanged<bool> onChanged;
+
+  const _InviteMethodToggle({required this.byPhone, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.bgSubtle,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Row(
+        children: [
+          _segment(context, 'Email', false),
+          _segment(context, 'Phone', true),
+        ],
+      ),
+    );
+  }
+
+  Widget _segment(BuildContext context, String label, bool value) {
+    final isSelected = byPhone == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onChanged(value),
+        child: AnimatedContainer(
+          duration: AppDuration.fast,
+          height: 38,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.bgPrimary : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            boxShadow: isSelected ? AppShadow.card : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ContactInvite extends StatelessWidget {
   final TextEditingController controller;
   final bool sending;
+  final bool byPhone;
   final VoidCallback onSend;
 
   const _ContactInvite({
     required this.controller,
     required this.sending,
+    required this.byPhone,
     required this.onSend,
   });
 
@@ -530,11 +607,13 @@ class _ContactInvite extends StatelessWidget {
       children: [
         Expanded(
           child: PSTextField(
-            label: 'Email',
+            label: byPhone ? 'Mobile number' : 'Email',
             showLabel: false,
-            placeholder: 'name@example.com',
+            placeholder: byPhone ? '98765 43210' : 'name@example.com',
             controller: controller,
-            keyboardType: TextInputType.emailAddress,
+            keyboardType: byPhone
+                ? TextInputType.phone
+                : TextInputType.emailAddress,
             enabled: !sending,
             textInputAction: TextInputAction.send,
           ),

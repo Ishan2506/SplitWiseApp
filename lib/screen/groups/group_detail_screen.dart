@@ -19,6 +19,7 @@ import '../add_expense_screen.dart';
 import '../expense_detail_screen.dart';
 import '../receipt/receipt_scan_screen.dart';
 import 'create_group_screen.dart';
+import 'default_split_screen.dart';
 import 'group_charts_screen.dart';
 import 'group_members_screen.dart';
 import 'group_widgets.dart';
@@ -204,6 +205,13 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 );
               } else if (value == 'export') {
                 _exportCsv(group);
+              } else if (value == 'default_split') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DefaultSplitScreen(groupId: group.id),
+                  ),
+                );
               }
             },
             itemBuilder: (_) => [
@@ -228,6 +236,16 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 ),
               ),
               if (isCreator) ...[
+                const PopupMenuItem(
+                  value: 'default_split',
+                  child: Row(
+                    children: [
+                      Icon(Icons.percent_rounded, size: 18),
+                      SizedBox(width: 10),
+                      Text('Default split'),
+                    ],
+                  ),
+                ),
                 const PopupMenuItem(
                   value: 'edit',
                   child: Row(

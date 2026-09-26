@@ -71,8 +71,13 @@ class Expense {
   final double? originalAmount;
   final String? originalCurrency;
 
+  /// The bill/receipt photo attached to this expense, if any — an absolute
+  /// URL, same shape as a user's avatar. Empty when none was attached.
+  final String receiptUrl;
+
   bool get hasMultiplePayers => payers.length > 1;
   bool get wasConverted => originalCurrency != null;
+  bool get hasReceipt => receiptUrl.isNotEmpty;
 
   Expense({
     required this.id,
@@ -88,6 +93,7 @@ class Expense {
     this.notes,
     this.originalAmount,
     this.originalCurrency,
+    this.receiptUrl = '',
   }) : payers = payers ?? {paidById: amount};
 
   /// Builds an expense from the server payload.
@@ -146,6 +152,7 @@ class Expense {
       originalCurrency: (json['originalCurrency'] as String?)?.isEmpty ?? true
           ? null
           : json['originalCurrency'] as String,
+      receiptUrl: (json['receiptUrl'] ?? '').toString(),
     );
   }
 

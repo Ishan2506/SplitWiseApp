@@ -187,6 +187,19 @@ class GroupProvider extends ChangeNotifier {
     return result;
   }
 
+  /// Sets (or, with `splits: null`, clears) the group's default split ratio.
+  Future<Map<String, dynamic>> setDefaultSplit({
+    required String groupId,
+    Map<String, double>? splits,
+  }) async {
+    final result =
+        await ApiService.setDefaultSplit(groupId: groupId, splits: splits);
+    if (result['success'] == true) {
+      _upsert(result['group'] as GroupModel);
+    }
+    return result;
+  }
+
   Future<Map<String, dynamic>> deleteGroup(String groupId) async {
     final result = await ApiService.deleteGroup(groupId);
     if (result['success'] == true) _remove(groupId);
@@ -219,6 +232,25 @@ class GroupProvider extends ChangeNotifier {
     final result = await ApiService.inviteToGroup(
       groupId: groupId,
       email: email,
+    );
+    if (result['success'] == true && result['group'] != null) {
+      _upsert(result['group'] as GroupModel);
+      if (result['added'] == true) await loadBalances(groupId);
+    }
+    return result;
+  }
+
+  /// Invites someone by phone number rather than email. There is no SMS
+  /// provider configured, so unlike [inviteByEmail] nothing gets texted —
+  /// the invite is saved as pending and the inviter shares the join link
+  /// themselves (the existing "Share invite" action already does this).
+  Future<Map<String, dynamic>> inviteByPhone({
+    required String groupId,
+    required String mobileNumber,
+  }) async {
+    final result = await ApiService.inviteToGroup(
+      groupId: groupId,
+      mobileNumber: mobileNumber,
     );
     if (result['success'] == true && result['group'] != null) {
       _upsert(result['group'] as GroupModel);
