@@ -43,6 +43,15 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- Push notifications: lets a notification's data payload be processed
+	     reliably even when the app is backgrounded. Requires the "Push
+	     Notifications" capability to also be enabled for the Runner target
+	     in Xcode (Signing & Capabilities) — that step also creates/wires the
+	     entitlements file and can't be done from a plain file edit. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<!-- Scanning group invite QR codes. -->

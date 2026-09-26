@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../main.dart';
 import '../../state/state_manager.dart';
+import '../../utils/notification_service.dart';
 import 'join_group_screen.dart';
 
 /// Pulls the invite code out of a link, if it holds one.
@@ -115,10 +116,16 @@ class _InviteLinkHandlerState extends State<InviteLinkHandler> {
   Widget build(BuildContext context) {
     // Release a held invite the moment the user signs in.
     final isLoggedIn = context.watch<StateManager>().isLoggedIn;
-    if (isLoggedIn && !_wasLoggedIn && _pendingCode != null) {
-      final code = _pendingCode!;
-      _pendingCode = null;
-      _openJoinScreen(code);
+    if (isLoggedIn && !_wasLoggedIn) {
+      if (_pendingCode != null) {
+        final code = _pendingCode!;
+        _pendingCode = null;
+        _openJoinScreen(code);
+      }
+      // Same idea as a pending invite code: a notification that cold-started
+      // the app can only be routed once someone is actually signed in and
+      // the rest of the app's data has somewhere to load into.
+      NotificationService.instance.consumePendingTap();
     }
     _wasLoggedIn = isLoggedIn;
 

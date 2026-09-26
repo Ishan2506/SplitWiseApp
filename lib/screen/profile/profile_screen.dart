@@ -27,12 +27,34 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _pushNotifications = true;
   bool _emailSummary = false;
+  bool _updatingPush = false;
+
+  /// Persists the switch server-side — this is what the push-sending code
+  /// actually checks (pushRecipientsFor), not anything client-local.
+  /// Reverts the visible switch if the request fails, rather than showing a
+  /// state that didn't actually save.
+  Future<void> _togglePush(bool value) async {
+    setState(() => _updatingPush = true);
+    final result = await context
+        .read<StateManager>()
+        .updateProfile(pushNotifications: value);
+    if (!mounted) return;
+    setState(() => _updatingPush = false);
+
+    if (result['success'] != true) {
+      showAppSnack(
+        context,
+        (result['message'] ?? 'Could not update push notifications').toString(),
+        success: false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<StateManager>();
+    final pushEnabled = state.currentUserModel?.pushNotifications ?? false;
     final groupCount = context.watch<GroupProvider>().groups.length;
     final user = state.currentUser;
     final currency =
@@ -87,12 +109,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       label: 'Push notifications',
                       subtitle: 'Expenses, settlements and invites',
                       trailing: Switch(
-                        value: _pushNotifications,
-                        onChanged: (v) =>
-                            setState(() => _pushNotifications = v),
+                        value: pushEnabled,
+                        onChanged: _updatingPush ? null : _togglePush,
                       ),
-                      onTap: () => setState(
-                          () => _pushNotifications = !_pushNotifications),
+                      onTap: _updatingPush
+                          ? null
+                          : () => _togglePush(!pushEnabled),
                     ),
                     _SettingsRow(
                       icon: Icons.mail_outline_rounded,

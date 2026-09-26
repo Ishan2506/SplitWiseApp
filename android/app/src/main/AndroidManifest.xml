@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Talking to the API. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Push notifications (Android 13+ requires this to be requested explicitly). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <!-- The scanners need a camera but the app still works without one:
          receipts can be uploaded from the gallery and invites pasted as codes. -->
@@ -76,6 +78,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- The channel a push notification lands in when the app is
+             backgrounded/terminated — must match NotificationService's
+             channel id (and the server's android.notification.channelId)
+             or Android silently falls back to a generic, undecorated one. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="expense_updates_channel" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

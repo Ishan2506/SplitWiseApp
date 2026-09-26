@@ -33,7 +33,9 @@ class UserModel {
       preferredCurrency: json['preferredCurrency'] ?? 'INR',
       language: json['language'] ?? 'en',
       emailNotifications: json['emailNotifications'] ?? true,
-      pushNotifications: json['pushNotifications'] ?? true,
+      // Off by default — matches the server's User.pushNotifications
+      // default; a user has to explicitly switch it on.
+      pushNotifications: json['pushNotifications'] ?? false,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : DateTime.now(),

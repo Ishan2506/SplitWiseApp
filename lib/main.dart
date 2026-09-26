@@ -1,3 +1,5 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'state/state_manager.dart';
@@ -7,13 +9,24 @@ import 'screen/Dashboard/dashboard_screen.dart';
 import 'screen/authentication/login_screen.dart';
 import 'screen/groups/invite_link_handler.dart';
 import 'theme/app_theme.dart';
+import 'utils/notification_service.dart';
 
-void main() {
+void main() async {
   // Required: StateManager reads the saved auth token from SharedPreferences
   // in its constructor, and that platform channel is unusable until the
   // binding exists. Without this the read throws and the stored session is
   // silently discarded, sending signed-in users back to the login screen.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Push notifications. Absent native config (no google-services.json /
+  // GoogleService-Info.plist dropped in yet) throws here rather than
+  // crashing the app — every push feature is then simply unavailable.
+  try {
+    await Firebase.initializeApp();
+    await NotificationService.instance.initialize();
+  } catch (e) {
+    if (kDebugMode) print('[push] Firebase initialization failed: $e');
+  }
 
   final stateManager = StateManager();
   final groupProvider = GroupProvider()
@@ -22,6 +35,15 @@ void main() {
 
   // Signing out must not leave the next user looking at someone else's groups.
   stateManager.onSignedOut = groupProvider.reset;
+
+  // Keeps this device's push-topic subscription in step with whoever is
+  // signed in — fires on every StateManager change, but syncSubscription()
+  // is a no-op unless the signed-in user actually changed.
+  stateManager.addListener(() {
+    NotificationService.instance.syncSubscription(
+      stateManager.isLoggedIn ? stateManager.currentUserId : null,
+    );
+  });
 
   runApp(
     MultiProvider(

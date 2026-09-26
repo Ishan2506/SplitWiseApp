@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "420780199520",
+    "project_id": "paisasplit-c8048",
+    "storage_bucket": "paisasplit-c8048.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:420780199520:android:e47c67560b2e7c8a883d05",
+        "android_client_info": {
+          "package_name": "com.bondbyte.paisasplit"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCnmy-E1VP2ZNRlR4qlG8yiHI3e2wdfrlA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
