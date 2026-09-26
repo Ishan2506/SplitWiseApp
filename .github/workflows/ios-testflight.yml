@@ -54,10 +54,20 @@ jobs:
       - name: Run tests
         run: flutter test --exclude-tags e2e
 
-      # Builds the .app without signing it. Signing happens in the
-      # archive step below, using the certificate imported beforehand.
+      # App Store Connect rejects any upload whose build number
+      # (CFBundleVersion) is not higher than the last one uploaded, so a
+      # fixed "+N" in pubspec.yaml fails every run after the first. Use the
+      # workflow run number instead: it increases on every run. The version
+      # name (1.0.0) still comes from pubspec.yaml.
+      # flutter build writes both into Generated.xcconfig, which the archive
+      # step below reads through Info.plist.
       - name: Build iOS (no codesign)
-        run: flutter build ios --release --no-codesign
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          set -eo pipefail
+          echo "Using build number $BUILD_NUMBER"
+          flutter build ios --release --no-codesign --build-number "$BUILD_NUMBER"
 
       - name: Import signing certificate and profile
         env:
