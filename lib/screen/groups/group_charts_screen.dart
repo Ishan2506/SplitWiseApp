@@ -5,27 +5,34 @@ import '../../model/group_model.dart';
 import '../../models/models.dart';
 import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
-import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/pie_chart_widget.dart';
 
-/// A fixed, memorable colour per known category, so "Food & drink" always
-/// reads the same everywhere this appears. An expense with any other
-/// category (data from before this field existed, or just an unusual value)
-/// still gets a colour — see [_colorForCategory] — it just is not one of
-/// these five.
-const _categoryColors = <String, Color>{
-  'Food & drink': Color(0xFFB3697F),
-  'Travel': Color(0xFF7C8AA6),
-  'Accommodation': Color(0xFFA8916F),
-  'Entertainment': Color(0xFF6F9280),
-  'Other': Color(0xFF9C8A9C),
-};
+/// A vivid, high-contrast palette just for charts — deliberately bolder than
+/// AppColors.avatarInk (that one is tuned for soft avatar backgrounds, which
+/// reads as muted/dull once it is filling a whole pie slice).
+///
+/// Colours are picked dynamically: a label (category name or payer name)
+/// hashes to one of these, so any category — the five built-in ones or a
+/// custom/legacy value — and any payer always lands on the same distinct
+/// colour everywhere it appears, with no fixed lookup table to maintain.
+const _chartPalette = <Color>[
+  Color(0xFFEF476F), // pink-red
+  Color(0xFF118AB2), // blue
+  Color(0xFFFFB703), // amber
+  Color(0xFF06D6A0), // teal-green
+  Color(0xFF9B5DE5), // purple
+  Color(0xFFFF6B35), // orange
+  Color(0xFF3A86FF), // azure
+  Color(0xFF06A77D), // deep green
+];
 
-Color _colorForCategory(String category, int fallbackIndex) =>
-    _categoryColors[category] ??
-    AppColors.avatarInk[fallbackIndex % AppColors.avatarInk.length];
+Color _chartColorFor(String label) {
+  if (label.isEmpty) return _chartPalette.first;
+  final hash = label.codeUnits.fold<int>(0, (sum, unit) => sum + unit);
+  return _chartPalette[hash % _chartPalette.length];
+}
 
 /// Two views on the same money: what it went on, and who fronted it.
 ///
@@ -117,11 +124,11 @@ class GroupChartsScreen extends StatelessWidget {
 
     final categories = totals.keys.toList();
     return [
-      for (var i = 0; i < categories.length; i++)
+      for (final category in categories)
         PieSlice(
-          label: categories[i],
-          value: totals[categories[i]]!,
-          color: _colorForCategory(categories[i], i),
+          label: category,
+          value: totals[category]!,
+          color: _chartColorFor(category),
         ),
     ];
   }
@@ -141,7 +148,7 @@ class GroupChartsScreen extends StatelessWidget {
       return PieSlice(
         label: name,
         value: entry.value,
-        color: AppColors.avatarInk[avatarTintIndexFor(name)],
+        color: _chartColorFor(name),
       );
     }).toList();
   }

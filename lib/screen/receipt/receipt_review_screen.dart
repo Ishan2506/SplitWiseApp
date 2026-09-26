@@ -195,6 +195,7 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
       final byItem = _splitByItem && _canSplitByItem;
       final result = await state.saveExpense(
         description: description,
+        category: _category,
         amount: _amount,
         paidById: _paidById!,
         splitType: byItem ? SplitType.exact : SplitType.equal,
