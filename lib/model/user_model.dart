@@ -8,6 +8,7 @@ class UserModel {
   final String language;
   final bool emailNotifications;
   final bool pushNotifications;
+  final bool emailSummaryEnabled;
   final DateTime createdAt;
 
   UserModel({
@@ -20,6 +21,7 @@ class UserModel {
     required this.language,
     required this.emailNotifications,
     required this.pushNotifications,
+    required this.emailSummaryEnabled,
     required this.createdAt,
   });
 
@@ -36,6 +38,7 @@ class UserModel {
       // Off by default — matches the server's User.pushNotifications
       // default; a user has to explicitly switch it on.
       pushNotifications: json['pushNotifications'] ?? false,
+      emailSummaryEnabled: json['emailSummaryEnabled'] ?? false,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : DateTime.now(),
@@ -53,6 +56,7 @@ class UserModel {
       'language': language,
       'emailNotifications': emailNotifications,
       'pushNotifications': pushNotifications,
+      'emailSummaryEnabled': emailSummaryEnabled,
       'createdAt': createdAt.toIso8601String(),
     };
   }

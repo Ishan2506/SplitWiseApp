@@ -27,8 +27,8 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _emailSummary = false;
   bool _updatingPush = false;
+  bool _updatingEmailSummary = false;
 
   /// Persists the switch server-side — this is what the push-sending code
   /// actually checks (pushRecipientsFor), not anything client-local.
@@ -51,10 +51,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// Same idea as [_togglePush] — persists server-side, since this is what
+  /// the weekly-summary scheduler actually checks before emailing anyone.
+  Future<void> _toggleEmailSummary(bool value) async {
+    setState(() => _updatingEmailSummary = true);
+    final result = await context
+        .read<StateManager>()
+        .updateProfile(emailSummaryEnabled: value);
+    if (!mounted) return;
+    setState(() => _updatingEmailSummary = false);
+
+    if (result['success'] == true) {
+      showAppSnack(
+        context,
+        value
+            ? "You'll get a weekly summary email with an Excel report attached"
+            : 'Weekly summary emails turned off',
+      );
+    } else {
+      showAppSnack(
+        context,
+        (result['message'] ?? 'Could not update the weekly summary setting')
+            .toString(),
+        success: false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<StateManager>();
     final pushEnabled = state.currentUserModel?.pushNotifications ?? false;
+    final emailSummaryEnabled =
+        state.currentUserModel?.emailSummaryEnabled ?? false;
     final groupCount = context.watch<GroupProvider>().groups.length;
     final user = state.currentUser;
     final currency =
@@ -119,13 +148,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _SettingsRow(
                       icon: Icons.mail_outline_rounded,
                       label: 'Weekly email summary',
-                      subtitle: 'A recap of what you spent',
+                      subtitle: 'Your groups and balances, as an Excel file',
                       trailing: Switch(
-                        value: _emailSummary,
-                        onChanged: (v) => setState(() => _emailSummary = v),
+                        value: emailSummaryEnabled,
+                        onChanged:
+                            _updatingEmailSummary ? null : _toggleEmailSummary,
                       ),
-                      onTap: () =>
-                          setState(() => _emailSummary = !_emailSummary),
+                      onTap: _updatingEmailSummary
+                          ? null
+                          : () => _toggleEmailSummary(!emailSummaryEnabled),
                       isLast: true,
                     ),
                   ],

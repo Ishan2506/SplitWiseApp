@@ -298,6 +298,7 @@ class StateManager extends ChangeNotifier {
     String? language,
     bool? emailNotifications,
     bool? pushNotifications,
+    bool? emailSummaryEnabled,
     String? password,
   }) async {
     final result = await ApiService.updateProfile(
@@ -309,6 +310,7 @@ class StateManager extends ChangeNotifier {
       language: language,
       emailNotifications: emailNotifications,
       pushNotifications: pushNotifications,
+      emailSummaryEnabled: emailSummaryEnabled,
       password: password,
     );
 

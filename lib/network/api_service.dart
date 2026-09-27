@@ -295,6 +295,7 @@ class ApiService {
     String? language,
     bool? emailNotifications,
     bool? pushNotifications,
+    bool? emailSummaryEnabled,
     String? password,
   }) async {
     try {
@@ -307,6 +308,7 @@ class ApiService {
       if (language != null) body['language'] = language;
       if (emailNotifications != null) body['emailNotifications'] = emailNotifications;
       if (pushNotifications != null) body['pushNotifications'] = pushNotifications;
+      if (emailSummaryEnabled != null) body['emailSummaryEnabled'] = emailSummaryEnabled;
       if (password != null && password.isNotEmpty) body['password'] = password;
 
       final response = await http.put(
