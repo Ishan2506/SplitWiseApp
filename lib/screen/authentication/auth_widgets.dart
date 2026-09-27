@@ -133,25 +133,20 @@ class GoogleButton extends StatelessWidget {
       height: 54,
       child: OutlinedButton(
         onPressed: isLoading ? null : onPressed,
-        child: isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2.2),
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const _GoogleGlyph(),
-                  const SizedBox(width: AppSpacing.xs),
-                  // Flexible so the label ellipsises on a narrow phone
-                  // instead of pushing the row past the button.
-                  Flexible(
-                    child: Text(label,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
-                ],
-              ),
+        // No spinner here — the app-wide loading overlay already shows one
+        // for every in-flight API call; this just blocks a double-tap.
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const _GoogleGlyph(),
+            const SizedBox(width: AppSpacing.xs),
+            // Flexible so the label ellipsises on a narrow phone
+            // instead of pushing the row past the button.
+            Flexible(
+              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -215,11 +215,9 @@ class _InviteScreenState extends State<InviteScreen> {
                 const SizedBox(height: AppSpacing.xs),
                 _GroupSummary(group: group),
                 const SizedBox(height: AppSpacing.md),
+                // App-wide loading overlay covers the wait — no local spinner.
                 if (invite == null)
-                  const Padding(
-                    padding: EdgeInsets.all(AppSpacing.xxl),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
+                  const SizedBox.shrink()
                 else ...[
                   _QrCard(
                     group: group,

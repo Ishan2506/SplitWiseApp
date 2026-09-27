@@ -377,24 +377,6 @@ class _AvatarPicker extends StatelessWidget {
                 showBorder: true,
                 imageUrl: photoUrl.isEmpty ? null : photoUrl,
               ),
-              if (isBusy)
-                Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
               Positioned(
                 right: 0,
                 bottom: 0,

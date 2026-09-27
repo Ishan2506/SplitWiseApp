@@ -10,6 +10,7 @@ import 'screen/authentication/login_screen.dart';
 import 'screen/groups/invite_link_handler.dart';
 import 'theme/app_theme.dart';
 import 'utils/notification_service.dart';
+import 'widgets/app_loader_overlay.dart';
 
 void main() async {
   // Required: StateManager reads the saved auth token from SharedPreferences
@@ -75,8 +76,12 @@ class SplitWiseApp extends StatelessWidget {
       // the splash screen leaves via pushReplacement, which would dispose a
       // handler mounted as a route and take the link subscription with it.
       // Here it outlives every route and pushes via [appNavigatorKey].
-      builder: (context, child) =>
+      builder: (context, child) => Stack(
+        children: [
           InviteLinkHandler(child: child ?? const SizedBox.shrink()),
+          const AppLoaderOverlay(),
+        ],
+      ),
       // Show splash screen first while initializing session
       home: const SplashScreen(),
       routes: {

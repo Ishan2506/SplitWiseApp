@@ -177,13 +177,7 @@ class _CurrencyRow extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (isSaving)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else if (isSelected)
+                if (isSelected)
                   const Icon(
                     Icons.check_circle_rounded,
                     color: AppColors.primaryAccent,

@@ -109,11 +109,12 @@ class _ActivityTabState extends State<ActivityTab> {
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm)),
+          // No local spinner here — the global loading overlay (shown for
+          // every in-flight API call, see main.dart) already covers this.
+          // While loading we simply show nothing yet, so the empty/error
+          // states below don't flash before the real data arrives.
           if (_loading)
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator()),
-            )
+            const SliverToBoxAdapter(child: SizedBox.shrink())
           else if (_error != null)
             SliverFillRemaining(
               hasScrollBody: false,

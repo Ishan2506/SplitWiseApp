@@ -6,8 +6,14 @@ import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../model/group_model.dart';
 import '../model/user_model.dart';
+import 'loader_http_client.dart';
 
 class ApiService {
+  // Routes every request through here instead of the bare http.* functions,
+  // so the global loading overlay shows for every call without each of the
+  // methods below needing to show/hide it themselves.
+  static final http.Client _client = LoaderHttpClient();
+
   // Physical Android phone: use the PC's LAN IP (phone + PC on same Wi-Fi).
   // Emulator would use 10.0.2.2; web/desktop uses localhost.
   static const String _defaultBaseUrl = kIsWeb
@@ -76,7 +82,7 @@ class ApiService {
         body['mobileNumber'] = mobileNumber;
       }
 
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/auth/register'),
         headers: _getHeaders(),
         body: jsonEncode(body),
@@ -103,7 +109,7 @@ class ApiService {
     required String password,
   }) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/auth/login'),
         headers: _getHeaders(),
         body: jsonEncode({
@@ -133,7 +139,7 @@ class ApiService {
     required String idToken,
   }) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/auth/google'),
         headers: _getHeaders(),
         body: jsonEncode({'idToken': idToken}),
@@ -202,7 +208,7 @@ class ApiService {
     required String email,
   }) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/auth/forgot-password'),
         headers: _getHeaders(),
         body: jsonEncode({'email': email}),
@@ -222,7 +228,7 @@ class ApiService {
   // Get list of all users for group member selection
   static Future<Map<String, dynamic>> getUsers() async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/users'),
         headers: _getHeaders(),
       );
@@ -244,7 +250,7 @@ class ApiService {
     required String token,
   }) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/auth/verify-reset-token'),
         headers: _getHeaders(),
         body: jsonEncode({'email': email, 'token': token}),
@@ -268,7 +274,7 @@ class ApiService {
     required String password,
   }) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/auth/reset-password'),
         headers: _getHeaders(),
         body: jsonEncode({'email': email, 'token': token, 'password': password}),
@@ -311,7 +317,7 @@ class ApiService {
       if (emailSummaryEnabled != null) body['emailSummaryEnabled'] = emailSummaryEnabled;
       if (password != null && password.isNotEmpty) body['password'] = password;
 
-      final response = await http.put(
+      final response = await _client.put(
         Uri.parse('$baseUrl/users/profile'),
         headers: _getHeaders(),
         body: jsonEncode(body),
@@ -354,7 +360,7 @@ class ApiService {
         contentType: _mediaTypeFor(filename),
       ));
 
-      final streamed = await request.send();
+      final streamed = await _client.send(request);
       final response = await http.Response.fromStream(streamed);
       final data = _decode(response);
 
@@ -373,7 +379,7 @@ class ApiService {
   /// DELETE /users/avatar — drops the photo and falls back to initials.
   static Future<Map<String, dynamic>> deleteAvatar() async {
     try {
-      final response = await http.delete(
+      final response = await _client.delete(
         Uri.parse('$baseUrl/users/avatar'),
         headers: _getHeaders(),
       );
@@ -457,7 +463,7 @@ class ApiService {
       final uri = Uri.parse(
         '$baseUrl/groups${type != null ? '?type=$type' : ''}',
       );
-      final response = await http.get(uri, headers: _getHeaders());
+      final response = await _client.get(uri, headers: _getHeaders());
       final data = _decode(response);
       if (_ok(response.statusCode)) {
         final groups = (data['groups'] as List? ?? [])
@@ -475,7 +481,7 @@ class ApiService {
   /// GET /groups/:id
   static Future<Map<String, dynamic>> getGroup(String groupId) =>
       _groupRequest(
-        () => http.get(Uri.parse('$baseUrl/groups/$groupId'),
+        () => _client.get(Uri.parse('$baseUrl/groups/$groupId'),
             headers: _getHeaders()),
         fallbackError: 'Could not load group',
       );
@@ -491,7 +497,7 @@ class ApiService {
     List<String> memberIds = const [],
   }) =>
       _groupRequest(
-        () => http.post(
+        () => _client.post(
           Uri.parse('$baseUrl/groups'),
           headers: _getHeaders(),
           body: jsonEncode({
@@ -518,7 +524,7 @@ class ApiService {
     String? currency,
   }) =>
       _groupRequest(
-        () => http.patch(
+        () => _client.patch(
           Uri.parse('$baseUrl/groups/$groupId'),
           headers: _getHeaders(),
           body: jsonEncode({
@@ -542,7 +548,7 @@ class ApiService {
     Map<String, double>? splits,
   }) =>
       _groupRequest(
-        () => http.patch(
+        () => _client.patch(
           Uri.parse('$baseUrl/groups/$groupId/default-split'),
           headers: _getHeaders(),
           body: jsonEncode({
@@ -560,7 +566,7 @@ class ApiService {
   /// DELETE /groups/:id
   static Future<Map<String, dynamic>> deleteGroup(String groupId) async {
     try {
-      final response = await http.delete(
+      final response = await _client.delete(
         Uri.parse('$baseUrl/groups/$groupId'),
         headers: _getHeaders(),
       );
@@ -577,7 +583,7 @@ class ApiService {
   /// GET /groups/:id/balances
   static Future<Map<String, dynamic>> getGroupBalances(String groupId) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/groups/$groupId/balances'),
         headers: _getHeaders(),
       );
@@ -606,7 +612,7 @@ class ApiService {
     String? note,
   }) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/groups/$groupId/settlements'),
         headers: _getHeaders(),
         body: jsonEncode({
@@ -633,7 +639,7 @@ class ApiService {
   static Future<Map<String, dynamic>> getGroupSettlements(
       String groupId) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/groups/$groupId/settlements'),
         headers: _getHeaders(),
       );
@@ -663,7 +669,7 @@ class ApiService {
     String? mobileNumber,
   }) =>
       _groupRequest(
-        () => http.post(
+        () => _client.post(
           Uri.parse('$baseUrl/groups/$groupId/members'),
           headers: _getHeaders(),
           body: jsonEncode({
@@ -681,7 +687,7 @@ class ApiService {
     required String userId,
   }) =>
       _groupRequest(
-        () => http.delete(
+        () => _client.delete(
           Uri.parse('$baseUrl/groups/$groupId/members/$userId'),
           headers: _getHeaders(),
         ),
@@ -699,7 +705,7 @@ class ApiService {
     String? mobileNumber,
   }) =>
       _groupRequest(
-        () => http.post(
+        () => _client.post(
           Uri.parse('$baseUrl/groups/$groupId/invites'),
           headers: _getHeaders(),
           body: jsonEncode({'email': ?email, 'mobileNumber': ?mobileNumber}),
@@ -713,7 +719,7 @@ class ApiService {
     required String inviteId,
   }) =>
       _groupRequest(
-        () => http.delete(
+        () => _client.delete(
           Uri.parse('$baseUrl/groups/$groupId/invites/$inviteId'),
           headers: _getHeaders(),
         ),
@@ -743,7 +749,7 @@ class ApiService {
   /// GET /groups/:id/invite — the current code, link and QR payload.
   static Future<Map<String, dynamic>> getGroupInvite(String groupId) =>
       _inviteRequest(
-        () => http.get(Uri.parse('$baseUrl/groups/$groupId/invite'),
+        () => _client.get(Uri.parse('$baseUrl/groups/$groupId/invite'),
             headers: _getHeaders()),
         'Could not load the invite',
       );
@@ -755,7 +761,7 @@ class ApiService {
     int? expiresInHours,
   }) =>
       _inviteRequest(
-        () => http.post(
+        () => _client.post(
           Uri.parse('$baseUrl/groups/$groupId/invite/rotate'),
           headers: _getHeaders(),
           body: jsonEncode({
@@ -773,7 +779,7 @@ class ApiService {
     bool clearExpiry = false,
   }) =>
       _inviteRequest(
-        () => http.patch(
+        () => _client.patch(
           Uri.parse('$baseUrl/groups/$groupId/invite'),
           headers: _getHeaders(),
           body: jsonEncode({
@@ -791,7 +797,7 @@ class ApiService {
   /// GET /groups/join/:code — what the group looks like before joining.
   static Future<Map<String, dynamic>> previewInvite(String code) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/groups/join/$code'),
         headers: _getHeaders(),
       );
@@ -811,7 +817,7 @@ class ApiService {
   /// POST /groups/join — redeem an invite code from a link or a QR scan.
   static Future<Map<String, dynamic>> joinGroupByCode(String code) =>
       _groupRequest(
-        () => http.post(
+        () => _client.post(
           Uri.parse('$baseUrl/groups/join'),
           headers: _getHeaders(),
           body: jsonEncode({'code': code}),
@@ -825,7 +831,7 @@ class ApiService {
       final uri = Uri.parse(
         '$baseUrl/users${search != null && search.isNotEmpty ? '?search=${Uri.encodeQueryComponent(search)}' : ''}',
       );
-      final response = await http.get(uri, headers: _getHeaders());
+      final response = await _client.get(uri, headers: _getHeaders());
       final data = _decode(response);
       if (_ok(response.statusCode)) {
         final users = (data['users'] as List? ?? [])
@@ -902,7 +908,7 @@ class ApiService {
     String? currency,
   }) =>
       _expenseRequest(
-        () => http.post(
+        () => _client.post(
           Uri.parse('$baseUrl/groups/$groupId/expenses'),
           headers: _getHeaders(),
           body: jsonEncode({
@@ -929,7 +935,7 @@ class ApiService {
   /// GET /groups/:groupId/expenses — every expense recorded in a group.
   static Future<Map<String, dynamic>> getGroupExpenses(String groupId) =>
       _expenseRequest(
-        () => http.get(
+        () => _client.get(
           Uri.parse('$baseUrl/groups/$groupId/expenses'),
           headers: _getHeaders(),
         ),
@@ -941,7 +947,7 @@ class ApiService {
   /// History right after login, rather than relying on whichever groups
   /// happen to already be loaded this session.
   static Future<Map<String, dynamic>> getMyExpenses() => _expenseRequest(
-        () => http.get(
+        () => _client.get(
           Uri.parse('$baseUrl/expenses/mine'),
           headers: _getHeaders(),
         ),
@@ -951,7 +957,7 @@ class ApiService {
   /// GET /expenses/:id — a single expense with its splits populated.
   static Future<Map<String, dynamic>> getExpense(String expenseId) =>
       _expenseRequest(
-        () => http.get(
+        () => _client.get(
           Uri.parse('$baseUrl/expenses/$expenseId'),
           headers: _getHeaders(),
         ),
@@ -978,7 +984,7 @@ class ApiService {
     String? currency,
   }) =>
       _expenseRequest(
-        () => http.patch(
+        () => _client.patch(
           Uri.parse('$baseUrl/expenses/$expenseId'),
           headers: _getHeaders(),
           body: jsonEncode({
@@ -1005,7 +1011,7 @@ class ApiService {
   /// DELETE /expenses/:id
   static Future<Map<String, dynamic>> deleteExpense(String expenseId) =>
       _expenseRequest(
-        () => http.delete(
+        () => _client.delete(
           Uri.parse('$baseUrl/expenses/$expenseId'),
           headers: _getHeaders(),
         ),
@@ -1036,7 +1042,7 @@ class ApiService {
         contentType: _mediaTypeFor(filename),
       ));
 
-      final streamed = await request.send();
+      final streamed = await _client.send(request);
       final response = await http.Response.fromStream(streamed);
       final data = _decode(response);
 
@@ -1060,7 +1066,7 @@ class ApiService {
     String expenseId,
   ) =>
       _expenseRequest(
-        () => http.delete(
+        () => _client.delete(
           Uri.parse('$baseUrl/expenses/$expenseId/receipt'),
           headers: _getHeaders(),
         ),
@@ -1117,7 +1123,7 @@ class ApiService {
     Map<String, double>? payers,
   }) =>
       _recurringRequest(
-        () => http.post(
+        () => _client.post(
           Uri.parse('$baseUrl/groups/$groupId/recurring-expenses'),
           headers: _getHeaders(),
           body: jsonEncode({
@@ -1143,7 +1149,7 @@ class ApiService {
   /// GET /groups/:groupId/recurring-expenses
   static Future<Map<String, dynamic>> getGroupRecurringExpenses(String groupId) =>
       _recurringRequest(
-        () => http.get(
+        () => _client.get(
           Uri.parse('$baseUrl/groups/$groupId/recurring-expenses'),
           headers: _getHeaders(),
         ),
@@ -1157,7 +1163,7 @@ class ApiService {
     bool? active,
   }) =>
       _recurringRequest(
-        () => http.patch(
+        () => _client.patch(
           Uri.parse('$baseUrl/recurring-expenses/$id'),
           headers: _getHeaders(),
           body: jsonEncode({'active': ?active}),
@@ -1168,7 +1174,7 @@ class ApiService {
   /// DELETE /recurring-expenses/:id
   static Future<Map<String, dynamic>> deleteRecurringExpense(String id) =>
       _recurringRequest(
-        () => http.delete(
+        () => _client.delete(
           Uri.parse('$baseUrl/recurring-expenses/$id'),
           headers: _getHeaders(),
         ),
@@ -1182,7 +1188,7 @@ class ApiService {
     String groupId,
   ) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/groups/$groupId/expenses/export'),
         headers: _getHeaders(),
       );
@@ -1237,7 +1243,7 @@ class ApiService {
   /// GET /expenses/:expenseId/comments
   static Future<Map<String, dynamic>> getExpenseComments(String expenseId) =>
       _commentRequest(
-        () => http.get(
+        () => _client.get(
           Uri.parse('$baseUrl/expenses/$expenseId/comments'),
           headers: _getHeaders(),
         ),
@@ -1250,7 +1256,7 @@ class ApiService {
     required String text,
   }) =>
       _commentRequest(
-        () => http.post(
+        () => _client.post(
           Uri.parse('$baseUrl/expenses/$expenseId/comments'),
           headers: _getHeaders(),
           body: jsonEncode({'text': text}),
@@ -1261,7 +1267,7 @@ class ApiService {
   /// DELETE /comments/:id
   static Future<Map<String, dynamic>> deleteComment(String commentId) =>
       _commentRequest(
-        () => http.delete(
+        () => _client.delete(
           Uri.parse('$baseUrl/comments/$commentId'),
           headers: _getHeaders(),
         ),
@@ -1280,7 +1286,7 @@ class ApiService {
       final uri = Uri.parse('$baseUrl/activity').replace(
         queryParameters: groupId != null ? {'groupId': groupId} : null,
       );
-      final response = await http.get(uri, headers: _getHeaders());
+      final response = await _client.get(uri, headers: _getHeaders());
       final data = _decode(response);
 
       if (_ok(response.statusCode)) {
@@ -1305,7 +1311,7 @@ class ApiService {
   /// accurate regardless of which group filter the Activity tab is on.
   static Future<Map<String, dynamic>> getUnreadActivityCount() async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/activity/unread-count'),
         headers: _getHeaders(),
       );
@@ -1325,7 +1331,7 @@ class ApiService {
   /// PATCH /activity/:id/read
   static Future<Map<String, dynamic>> markActivityRead(String id) async {
     try {
-      final response = await http.patch(
+      final response = await _client.patch(
         Uri.parse('$baseUrl/activity/$id/read'),
         headers: _getHeaders(),
       );
@@ -1343,7 +1349,7 @@ class ApiService {
   /// PATCH /activity/read-all
   static Future<Map<String, dynamic>> markAllActivityRead() async {
     try {
-      final response = await http.patch(
+      final response = await _client.patch(
         Uri.parse('$baseUrl/activity/read-all'),
         headers: _getHeaders(),
       );

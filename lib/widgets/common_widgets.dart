@@ -285,16 +285,10 @@ class PSButton extends StatelessWidget {
         fg = AppColors.textSecondary;
     }
 
-    final child = isLoading
-        ? SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.2,
-              valueColor: AlwaysStoppedAnimation<Color>(fg),
-            ),
-          )
-        : Row(
+    // No spinner here even when isLoading — the app-wide loading overlay
+    // (shown for every in-flight API call) already covers that; this just
+    // disables the button so it can't be tapped twice while one is running.
+    final child = Row(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [

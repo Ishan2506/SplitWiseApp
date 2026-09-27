@@ -495,12 +495,6 @@ class _ReceiptSectionState extends State<_ReceiptSection> {
                       ),
                     ),
                   ),
-                  if (_busy)
-                    const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
                 ],
               ),
             ),
@@ -541,15 +535,8 @@ class _ReceiptSectionState extends State<_ReceiptSection> {
                     shape: const CircleBorder(),
                     child: IconButton(
                       tooltip: 'Remove receipt',
-                      icon: _busy
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.close_rounded,
-                              color: Colors.white, size: 18),
+                      icon: const Icon(Icons.close_rounded,
+                          color: Colors.white, size: 18),
                       onPressed: _busy ? null : _confirmRemove,
                       visualDensity: VisualDensity.compact,
                     ),
@@ -674,11 +661,10 @@ class _CommentsSectionState extends State<_CommentsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // No local spinner while loading — the app-wide overlay already
+        // covers it; this just avoids flashing "No comments yet" first.
         if (_loading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-            child: Center(child: CircularProgressIndicator()),
-          )
+          const SizedBox.shrink()
         else if (comments.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
@@ -739,13 +725,7 @@ class _CommentsSectionState extends State<_CommentsSection> {
             IconButton(
               tooltip: 'Send',
               onPressed: _sending ? null : _send,
-              icon: _sending
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send_rounded, color: AppColors.primaryAccent),
+              icon: const Icon(Icons.send_rounded, color: AppColors.primaryAccent),
             ),
           ],
         ),

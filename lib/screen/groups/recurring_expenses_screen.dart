@@ -126,8 +126,9 @@ class _RecurringExpensesScreenState extends State<RecurringExpensesScreen> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('New'),
       ),
+      // App-wide loading overlay covers the wait — no local spinner.
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SizedBox.shrink()
           : templates.isEmpty
               ? EmptyStateWidget(
                   iconData: Icons.repeat_rounded,

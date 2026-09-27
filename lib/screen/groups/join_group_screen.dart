@@ -239,16 +239,9 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
                   borderRadius: BorderRadius.circular(12)),
               padding: const EdgeInsets.symmetric(horizontal: 20),
             ),
-            child: _loadingPreview
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Text('Find',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text('Find',
+                style:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ),
       ],
@@ -395,21 +388,14 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                 ),
-                child: _joining
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : Text(
-                        canJoin ? 'Join group' : 'Joining unavailable',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
+                child: Text(
+                  canJoin ? 'Join group' : 'Joining unavailable',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
               ),
             ),
           ],

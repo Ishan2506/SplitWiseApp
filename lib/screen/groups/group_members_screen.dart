@@ -336,15 +336,6 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
               ),
             ],
           ),
-          if (_busy)
-            const Positioned.fill(
-              child: ColoredBox(
-                color: Color(0x66000000),
-                child: Center(
-                  child: CircularProgressIndicator(color: GroupColors.primary),
-                ),
-              ),
-            ),
         ],
       ),
     );
