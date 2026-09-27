@@ -1,5 +1,62 @@
 enum SplitType { equal, exact, percentage }
 
+/// One row in the signed-in user's personal, server-persisted activity
+/// feed — what *they* did (created/edited/deleted a group, added a member,
+/// added/edited/deleted an expense, recorded/removed a settlement).
+/// Unlike the local in-app notification list, this survives closing and
+/// reopening the app, because it is backed by a real endpoint.
+class ActivityEntry {
+  final String id;
+  final String action;
+  final String? groupId;
+  final String groupName;
+  final String description;
+  final double? amount;
+  final DateTime createdAt;
+  final bool read;
+
+  ActivityEntry({
+    required this.id,
+    required this.action,
+    required this.groupName,
+    required this.description,
+    required this.createdAt,
+    this.groupId,
+    this.amount,
+    this.read = false,
+  });
+
+  factory ActivityEntry.fromJson(Map<String, dynamic> json) {
+    String idOf(dynamic value) {
+      if (value is Map) return (value['_id'] ?? value['id'] ?? '').toString();
+      return (value ?? '').toString();
+    }
+
+    final groupId = idOf(json['group']);
+    return ActivityEntry(
+      id: idOf(json['_id'] ?? json['id']),
+      action: (json['action'] ?? '').toString(),
+      groupId: groupId.isEmpty ? null : groupId,
+      groupName: (json['groupName'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      amount: (json['amount'] as num?)?.toDouble(),
+      createdAt:
+          DateTime.tryParse((json['createdAt'] ?? '').toString())?.toLocal() ??
+              DateTime.now(),
+      read: json['read'] as bool? ?? false,
+    );
+  }
+
+  /// The icon that best represents this action, for the feed row.
+  String get iconKey {
+    if (action.startsWith('group_')) return 'group';
+    if (action.startsWith('member_')) return 'member';
+    if (action.startsWith('expense_')) return 'expense';
+    if (action.startsWith('settlement_')) return 'settlement';
+    return 'other';
+  }
+}
+
 class Member {
   final String id;
   final String name;

@@ -108,7 +108,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<StateManager>();
-    final unread = state.unreadNotificationCount;
+    final unread = state.unreadActivityCount;
 
     return PopScope(
       canPop: false,

@@ -934,6 +934,18 @@ class ApiService {
         fallbackError: 'Could not load expenses',
       );
 
+  /// GET /expenses/mine — every expense across every group the signed-in
+  /// user currently belongs to, in one call. Used to fully repopulate
+  /// History right after login, rather than relying on whichever groups
+  /// happen to already be loaded this session.
+  static Future<Map<String, dynamic>> getMyExpenses() => _expenseRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/expenses/mine'),
+          headers: _getHeaders(),
+        ),
+        fallbackError: 'Could not load your expenses',
+      );
+
   /// GET /expenses/:id — a single expense with its splits populated.
   static Future<Map<String, dynamic>> getExpense(String expenseId) =>
       _expenseRequest(
@@ -1253,4 +1265,94 @@ class ApiService {
         ),
         fallbackError: 'Could not delete the comment',
       );
+
+  // ---------------------------------------------------------------------
+  // Activity
+  // ---------------------------------------------------------------------
+
+  /// GET /activity — the signed-in user's own personal activity feed,
+  /// optionally narrowed to one group. Always actor-scoped: what *this*
+  /// account did, not a group-wide log of everyone's actions.
+  static Future<Map<String, dynamic>> getMyActivity({String? groupId}) async {
+    try {
+      final uri = Uri.parse('$baseUrl/activity').replace(
+        queryParameters: groupId != null ? {'groupId': groupId} : null,
+      );
+      final response = await http.get(uri, headers: _getHeaders());
+      final data = _decode(response);
+
+      if (_ok(response.statusCode)) {
+        return {
+          'success': true,
+          'activity': (data['activity'] as List? ?? [])
+              .whereType<Map<String, dynamic>>()
+              .toList(),
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not load activity',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /activity/unread-count — for the bottom-nav badge. Its own call
+  /// rather than derived from getMyActivity's list, so the badge is
+  /// accurate regardless of which group filter the Activity tab is on.
+  static Future<Map<String, dynamic>> getUnreadActivityCount() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/activity/unread-count'),
+        headers: _getHeaders(),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'count': (data['count'] as num?)?.toInt() ?? 0};
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not load unread count',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// PATCH /activity/:id/read
+  static Future<Map<String, dynamic>> markActivityRead(String id) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('$baseUrl/activity/$id/read'),
+        headers: _getHeaders(),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) return {'success': true};
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not update the activity entry',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// PATCH /activity/read-all
+  static Future<Map<String, dynamic>> markAllActivityRead() async {
+    try {
+      final response = await http.patch(
+        Uri.parse('$baseUrl/activity/read-all'),
+        headers: _getHeaders(),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) return {'success': true};
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not mark everything read',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
 }

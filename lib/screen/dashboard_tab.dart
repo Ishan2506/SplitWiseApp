@@ -26,12 +26,22 @@ class _DashboardTabState extends State<DashboardTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<GroupProvider>().loadGroups();
+        // Repopulates History right away on a fresh app open — without
+        // this, it only ever shows whatever groups happen to already be
+        // loaded from being opened individually this session.
+        final state = context.read<StateManager>();
+        state.loadAllMyExpenses();
+        state.loadUnreadActivityCount();
       }
     });
   }
 
-  Future<void> _refresh() =>
-      context.read<GroupProvider>().loadGroups(silent: true);
+  Future<void> _refresh() {
+    final state = context.read<StateManager>();
+    state.loadAllMyExpenses();
+    state.loadUnreadActivityCount();
+    return context.read<GroupProvider>().loadGroups(silent: true);
+  }
 
   @override
   Widget build(BuildContext context) {

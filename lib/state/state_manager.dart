@@ -614,6 +614,109 @@ class StateManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Loads every expense across every group the user belongs to, in one
+  /// call — the fix for History showing nothing on a fresh app reopen:
+  /// without this, `_expenses` only ever had whatever a user happened to
+  /// load by opening individual groups' Detail screens this session.
+  /// Called once from the Dashboard tab, right alongside loading the
+  /// group list itself.
+  Future<void> loadAllMyExpenses() async {
+    final result = await ApiService.getMyExpenses();
+    if (result['success'] != true) return;
+
+    final fetched = (result['expenses'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(Expense.fromJson)
+        .toList();
+
+    _expenses
+      ..clear()
+      ..addAll(fetched);
+    notifyListeners();
+  }
+
+  /// The signed-in user's own personal activity feed — what *they* did,
+  /// persisted server-side so it survives closing and reopening the app
+  /// (unlike the local `notifications` list below, which is ephemeral).
+  /// Pass [groupId] to narrow to one group; omit it for everything.
+  final List<ActivityEntry> _remoteActivity = [];
+  List<ActivityEntry> get remoteActivity => List.unmodifiable(_remoteActivity);
+
+  Future<Map<String, dynamic>> loadMyActivity({String? groupId}) async {
+    final result = await ApiService.getMyActivity(groupId: groupId);
+    if (result['success'] != true) {
+      return {
+        'success': false,
+        'message': result['message'] ?? 'Could not load activity',
+      };
+    }
+
+    final fetched = (result['activity'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(ActivityEntry.fromJson)
+        .toList();
+
+    _remoteActivity
+      ..clear()
+      ..addAll(fetched);
+    notifyListeners();
+    return {'success': true};
+  }
+
+  /// The bottom-nav Activity badge count — its own persisted, server-side
+  /// number (see getUnreadActivityCount), not derived from whatever
+  /// [_remoteActivity] happens to have loaded under the current filter.
+  int _unreadActivityCount = 0;
+  int get unreadActivityCount => _unreadActivityCount;
+
+  Future<void> loadUnreadActivityCount() async {
+    final result = await ApiService.getUnreadActivityCount();
+    if (result['success'] != true) return;
+    _unreadActivityCount = result['count'] as int? ?? 0;
+    notifyListeners();
+  }
+
+  /// Marks one entry read — both server-side and in the already-loaded
+  /// list, so the tap feels instant rather than waiting on a reload.
+  Future<void> markActivityRead(String id) async {
+    final index = _remoteActivity.indexWhere((e) => e.id == id);
+    if (index >= 0 && !_remoteActivity[index].read) {
+      final entry = _remoteActivity[index];
+      _remoteActivity[index] = ActivityEntry(
+        id: entry.id,
+        action: entry.action,
+        groupId: entry.groupId,
+        groupName: entry.groupName,
+        description: entry.description,
+        amount: entry.amount,
+        createdAt: entry.createdAt,
+        read: true,
+      );
+      if (_unreadActivityCount > 0) _unreadActivityCount--;
+      notifyListeners();
+    }
+    await ApiService.markActivityRead(id);
+  }
+
+  Future<void> markAllActivityRead() async {
+    _remoteActivity.replaceRange(0, _remoteActivity.length, [
+      for (final entry in _remoteActivity)
+        ActivityEntry(
+          id: entry.id,
+          action: entry.action,
+          groupId: entry.groupId,
+          groupName: entry.groupName,
+          description: entry.description,
+          amount: entry.amount,
+          createdAt: entry.createdAt,
+          read: true,
+        ),
+    ]);
+    _unreadActivityCount = 0;
+    notifyListeners();
+    await ApiService.markAllActivityRead();
+  }
+
   /// Loads every recurring-expense template set up for a group — active or
   /// paused, so the management screen can show both.
   Future<void> loadGroupRecurringExpenses(String groupId) async {
