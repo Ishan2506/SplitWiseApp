@@ -13,11 +13,13 @@ import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
+import '../../widgets/budget_bar.dart';
 import '../../widgets/common_widgets.dart';
 import '../../network/receipt_scanner.dart';
 import '../add_expense_screen.dart';
 import '../expense_detail_screen.dart';
 import '../receipt/receipt_scan_screen.dart';
+import 'budgets_screen.dart';
 import 'create_group_screen.dart';
 import 'default_split_screen.dart';
 import 'group_charts_screen.dart';
@@ -46,9 +48,10 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<GroupProvider>().refreshGroup(widget.groupId);
+      context.read<GroupProvider>().loadBudgets(widget.groupId);
       context.read<StateManager>().loadGroupExpenses(widget.groupId);
     });
-  } 
+  }
 
   /// Downloads the group's expense history as a CSV and hands it to the
   /// OS share sheet. On web there is no filesystem to write to, so the CSV
@@ -153,6 +156,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final currentUserId = state.currentUserId;
     final isCreator = group.isCreatedBy(currentUserId);
     final balances = provider.balancesFor(group.id);
+    final budgets = provider.budgetsFor(group.id);
     final userBalance = balances.balanceFor(currentUserId);
 
     // Newest first, and only this group's.
@@ -205,6 +209,13 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 );
               } else if (value == 'export') {
                 _exportCsv(group);
+              } else if (value == 'budgets') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => BudgetsScreen(groupId: group.id),
+                  ),
+                );
               } else if (value == 'default_split') {
                 Navigator.push(
                   context,
@@ -215,6 +226,16 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               }
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'budgets',
+                child: Row(
+                  children: [
+                    Icon(Icons.savings_outlined, size: 18),
+                    SizedBox(width: 10),
+                    Text('Monthly budgets'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'recurring',
                 child: Row(
@@ -334,6 +355,19 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                       group: group,
                       balances: balances,
                       currentUserId: currentUserId,
+                    ),
+                  ],
+                  if (!budgets.isEmpty) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    _BudgetSummaryCard(
+                      budgets: budgets,
+                      currencySymbol: group.currencySymbol,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => BudgetsScreen(groupId: group.id),
+                        ),
+                      ),
                     ),
                   ],
                   const SizedBox(height: AppSpacing.xl),
@@ -591,6 +625,63 @@ class _YourPosition extends StatelessWidget {
               ],
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// This month's budgets at a glance — the most-used few, so one that is
+/// running hot is visible without opening anything.
+class _BudgetSummaryCard extends StatelessWidget {
+  final GroupBudgets budgets;
+  final String currencySymbol;
+  final VoidCallback onTap;
+
+  const _BudgetSummaryCard({
+    required this.budgets,
+    required this.currencySymbol,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final top = [...budgets.budgets]
+      ..sort((a, b) => b.percent.compareTo(a.percent));
+    final shown = top.take(3).toList();
+    final hidden = top.length - shown.length;
+
+    return PSCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.savings_outlined,
+                  size: 17, color: AppColors.primaryAccent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text('Budgets · ${budgetMonthLabel(budgets.month)}',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
+              const Icon(Icons.chevron_right_rounded,
+                  size: 20, color: AppColors.textTertiary),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          BudgetBarList(
+            budgets: shown,
+            currencySymbol: currencySymbol,
+            compact: true,
+          ),
+          if (hidden > 0) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              '+$hidden more',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ],
       ),
     );

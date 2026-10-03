@@ -6,6 +6,7 @@ import '../state/group_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_constants.dart';
 import '../widgets/common_widgets.dart';
+import 'balances/people_balances_screen.dart';
 import 'groups/group_detail_screen.dart';
 import 'groups/create_group_screen.dart';
 import 'groups/join_group_screen.dart';
@@ -88,6 +89,36 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
             ),
           ),
+
+          // Per person, netted across every shared group — only once there
+          // is someone to show.
+          if (provider.netBalances.people.isNotEmpty)
+            SliverToBoxAdapter(
+              child: PageContainer(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SectionHeader(
+                      title: 'By person',
+                      subtitle: 'Netted across all your groups',
+                      actionLabel: provider.netBalances.people.length > 3
+                          ? 'See all'
+                          : 'Details',
+                      onAction: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const PeopleBalancesScreen()),
+                      ),
+                    ),
+                    PersonBalanceList(
+                      people: provider.netBalances.people.take(3).toList(),
+                      all: provider.netBalances,
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                  ],
+                ),
+              ),
+            ),
 
           SliverToBoxAdapter(
             child: PageContainer(

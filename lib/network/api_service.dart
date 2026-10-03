@@ -298,6 +298,8 @@ class ApiService {
     String? mobileNumber,
     String? avatarUrl,
     String? preferredCurrency,
+    String? upiId,
+    String? paypalMe,
     String? language,
     bool? emailNotifications,
     bool? pushNotifications,
@@ -306,6 +308,9 @@ class ApiService {
   }) async {
     try {
       final body = <String, dynamic>{};
+      // '' is meaningful here (it clears the field), so only null is skipped.
+      if (upiId != null) body['upiId'] = upiId;
+      if (paypalMe != null) body['paypalMe'] = paypalMe;
       if (name != null) body['name'] = name;
       if (email != null) body['email'] = email;
       if (mobileNumber != null) body['mobileNumber'] = mobileNumber;
@@ -610,6 +615,7 @@ class ApiService {
     required String to,
     required double amount,
     String? note,
+    String method = 'cash',
   }) async {
     try {
       final response = await _client.post(
@@ -620,6 +626,7 @@ class ApiService {
           'to': to,
           'amount': amount,
           if (note != null && note.isNotEmpty) 'note': note,
+          'method': method,
         }),
       );
       final data = _decode(response);
@@ -655,6 +662,109 @@ class ApiService {
       return {
         'success': false,
         'message': data['message'] ?? 'Could not load payments',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /groups/:id/budgets — monthly budgets and this month's spend.
+  static Future<Map<String, dynamic>> getGroupBudgets(String groupId) async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$baseUrl/groups/$groupId/budgets'),
+        headers: _getHeaders(),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'budgets': GroupBudgets.fromJson(data)};
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not load budgets',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// PUT /groups/:id/budgets — replaces every budget (creator only).
+  /// [budgets] maps category -> monthly amount; empty removes them all.
+  static Future<Map<String, dynamic>> setGroupBudgets({
+    required String groupId,
+    required Map<String, double> budgets,
+  }) async {
+    try {
+      final response = await _client.put(
+        Uri.parse('$baseUrl/groups/$groupId/budgets'),
+        headers: _getHeaders(),
+        body: jsonEncode({
+          'budgets': [
+            for (final entry in budgets.entries)
+              {'category': entry.key, 'amount': entry.value},
+          ],
+        }),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'budgets': GroupBudgets.fromJson(data)};
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not save budgets',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /users/me/net-balances — what the signed-in user owes / is owed by
+  /// each person, netted across every group they share.
+  static Future<Map<String, dynamic>> getNetBalances() async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$baseUrl/users/me/net-balances'),
+        headers: _getHeaders(),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {'success': true, 'netBalances': NetBalances.fromJson(data)};
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not load balances',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// POST /users/me/net-balances/:userId/settle — records a settlement in
+  /// every shared group so the whole net position with [userId] is cleared.
+  static Future<Map<String, dynamic>> settleNetBalance({
+    required String userId,
+    String method = 'cash',
+    String? note,
+  }) async {
+    try {
+      final response = await _client.post(
+        Uri.parse('$baseUrl/users/me/net-balances/$userId/settle'),
+        headers: _getHeaders(),
+        body: jsonEncode({
+          'method': method,
+          if (note != null && note.isNotEmpty) 'note': note,
+        }),
+      );
+      final data = _decode(response);
+      if (_ok(response.statusCode)) {
+        return {
+          'success': true,
+          'settled': (data['settled'] as num?)?.toInt() ?? 0,
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Could not record the settlement',
       };
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};

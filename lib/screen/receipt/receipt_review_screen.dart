@@ -10,6 +10,7 @@ import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/currencies.dart';
+import '../../utils/expense_categories.dart';
 import '../../utils/receipt_parser.dart';
 import '../../widgets/common_widgets.dart';
 
@@ -71,13 +72,7 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   /// as low confidence — they have looked at it, which is all the flag asked.
   final Set<String> _corrected = {};
 
-  static const _categories = <String, IconData>{
-    'Food & drink': Icons.restaurant_rounded,
-    'Travel': Icons.flight_takeoff_rounded,
-    'Accommodation': Icons.hotel_rounded,
-    'Entertainment': Icons.movie_rounded,
-    'Other': Icons.category_rounded,
-  };
+  static const _categories = kExpenseCategories;
 
   @override
   void initState() {

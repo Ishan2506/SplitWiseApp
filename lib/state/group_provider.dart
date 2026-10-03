@@ -8,6 +8,8 @@ import '../network/api_service.dart';
 class GroupProvider extends ChangeNotifier {
   List<GroupModel> _groups = [];
   final Map<String, GroupBalances> _balances = {};
+  final Map<String, GroupBudgets> _budgets = {};
+  NetBalances _netBalances = const NetBalances.empty();
 
   bool _isLoading = false;
   bool _hasLoadedOnce = false;
@@ -36,6 +38,27 @@ class GroupProvider extends ChangeNotifier {
   /// Balances for a group; empty until [loadBalances] has run for it.
   GroupBalances balancesFor(String groupId) =>
       _balances[groupId] ?? const GroupBalances.empty();
+
+  /// Monthly budgets for a group; empty until [loadBudgets] has run for it.
+  GroupBudgets budgetsFor(String groupId) =>
+      _budgets[groupId] ?? const GroupBudgets.empty();
+
+  /// The signed-in user's balance with each person, netted across groups.
+  /// Empty until [loadNetBalances] has run.
+  NetBalances get netBalances => _netBalances;
+
+  /// Seeds data without the network, for widget tests.
+  @visibleForTesting
+  void debugSeed({
+    List<GroupModel>? groups,
+    NetBalances? netBalances,
+    Map<String, GroupBudgets>? budgets,
+  }) {
+    if (groups != null) _groups = List.of(groups);
+    if (netBalances != null) _netBalances = netBalances;
+    if (budgets != null) _budgets.addAll(budgets);
+    notifyListeners();
+  }
 
   /// The signed-in user's net position in a group.
   double userBalanceIn(String groupId, String userId) =>
@@ -86,8 +109,66 @@ class GroupProvider extends ChangeNotifier {
     notifyListeners();
 
     // Balances drive every group card, so fetch them for the whole list.
-    await Future.wait(_groups.map((g) => loadBalances(g.id, notify: false)));
+    await Future.wait([
+      ..._groups.map((g) => loadBalances(g.id, notify: false)),
+      loadNetBalances(notify: false),
+    ]);
     notifyListeners();
+  }
+
+  /// Fetches the cross-group, per-person balances shown on the dashboard.
+  Future<void> loadNetBalances({bool notify = true}) async {
+    final result = await ApiService.getNetBalances();
+    if (result['success'] == true) {
+      _netBalances = result['netBalances'] as NetBalances;
+      if (notify) notifyListeners();
+    }
+  }
+
+  /// Fetches this month's budget figures for one group.
+  Future<Map<String, dynamic>> loadBudgets(String groupId) async {
+    final result = await ApiService.getGroupBudgets(groupId);
+    if (result['success'] == true) {
+      _budgets[groupId] = result['budgets'] as GroupBudgets;
+      notifyListeners();
+    }
+    return result;
+  }
+
+  /// Replaces a group's budgets (category -> monthly amount).
+  Future<Map<String, dynamic>> saveBudgets({
+    required String groupId,
+    required Map<String, double> budgets,
+  }) async {
+    final result =
+        await ApiService.setGroupBudgets(groupId: groupId, budgets: budgets);
+    if (result['success'] == true) {
+      _budgets[groupId] = result['budgets'] as GroupBudgets;
+      notifyListeners();
+    }
+    return result;
+  }
+
+  /// Clears everything owed between the signed-in user and [userId] across
+  /// all shared groups, then pulls the balances that moved.
+  Future<Map<String, dynamic>> settleNetBalance({
+    required String userId,
+    String method = 'cash',
+    String? note,
+  }) async {
+    final result = await ApiService.settleNetBalance(
+      userId: userId,
+      method: method,
+      note: note,
+    );
+    if (result['success'] == true) {
+      await Future.wait([
+        ..._groups.map((g) => loadBalances(g.id, notify: false)),
+        loadNetBalances(notify: false),
+      ]);
+      notifyListeners();
+    }
+    return result;
   }
 
   /// Fetches balances for one group. Set [notify] to false when batching.
@@ -106,6 +187,10 @@ class GroupProvider extends ChangeNotifier {
       _upsert(result['group'] as GroupModel);
     }
     await loadBalances(groupId);
+    // A change in one group moves the per-person totals on the dashboard,
+    // and budgets track this month's spend.
+    loadNetBalances();
+    if (_budgets.containsKey(groupId)) loadBudgets(groupId);
   }
 
   void _upsert(GroupModel group) {
@@ -122,6 +207,7 @@ class GroupProvider extends ChangeNotifier {
   void _remove(String groupId) {
     _groups.removeWhere((g) => g.id == groupId);
     _balances.remove(groupId);
+    _budgets.remove(groupId);
     _publish();
     notifyListeners();
   }
@@ -130,6 +216,8 @@ class GroupProvider extends ChangeNotifier {
   void reset() {
     _groups = [];
     _balances.clear();
+    _budgets.clear();
+    _netBalances = const NetBalances.empty();
     _hasLoadedOnce = false;
     _error = null;
     _publish();
@@ -303,6 +391,7 @@ class GroupProvider extends ChangeNotifier {
     required String toUserId,
     required double amount,
     String? note,
+    String method = 'cash',
   }) async {
     final result = await ApiService.createSettlement(
       groupId: groupId,
@@ -310,9 +399,14 @@ class GroupProvider extends ChangeNotifier {
       to: toUserId,
       amount: amount,
       note: note,
+      method: method,
     );
     if (result['success'] == true) {
-      await loadBalances(groupId);
+      await Future.wait([
+        loadBalances(groupId, notify: false),
+        loadNetBalances(notify: false),
+      ]);
+      notifyListeners();
     }
     return result;
   }
@@ -380,6 +474,7 @@ class GroupProvider extends ChangeNotifier {
       pendingInvites: g.pendingInvites,
       invite: invite,
       updatedAt: g.updatedAt,
+      defaultSplit: g.defaultSplit,
     );
     notifyListeners();
   }

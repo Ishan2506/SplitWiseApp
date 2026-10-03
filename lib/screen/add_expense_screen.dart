@@ -7,6 +7,7 @@ import '../state/state_manager.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_constants.dart';
 import '../utils/currencies.dart';
+import '../utils/expense_categories.dart';
 import '../widgets/common_widgets.dart';
 
 /// Add an expense: what it was, how much, who paid, and how it splits.
@@ -123,13 +124,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   /// converts automatically when this differs from it.
   String _currencyCode = kDefaultCurrencyCode;
 
-  static const _categories = <String, IconData>{
-    'Food & drink': Icons.restaurant_rounded,
-    'Travel': Icons.flight_takeoff_rounded,
-    'Accommodation': Icons.hotel_rounded,
-    'Entertainment': Icons.movie_rounded,
-    'Other': Icons.category_rounded,
-  };
+  static const _categories = kExpenseCategories;
 
   @override
   void initState() {

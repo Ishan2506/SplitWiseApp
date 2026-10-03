@@ -95,12 +95,18 @@ class GroupMember {
   final String? mobileNumber;
   final String avatarUrl;
 
+  /// Where this member wants to be paid — empty when they have not set one.
+  final String upiId;
+  final String paypalMe;
+
   const GroupMember({
     required this.id,
     required this.name,
     this.email,
     this.mobileNumber,
     this.avatarUrl = '',
+    this.upiId = '',
+    this.paypalMe = '',
   });
 
   factory GroupMember.fromJson(Map<String, dynamic> json) {
@@ -110,6 +116,8 @@ class GroupMember {
       email: json['email'],
       mobileNumber: json['mobileNumber'],
       avatarUrl: json['avatarUrl'] ?? '',
+      upiId: json['upiId'] ?? '',
+      paypalMe: json['paypalMe'] ?? '',
     );
   }
 
@@ -289,6 +297,13 @@ class GroupModel {
 
   bool hasMember(String userId) => members.any((m) => m.id == userId);
 
+  GroupMember? memberById(String userId) {
+    for (final m in members) {
+      if (m.id == userId) return m;
+    }
+    return null;
+  }
+
   bool get hasBalanceLimit => balanceLimit > 0;
 
   bool get hasDefaultSplit => defaultSplit != null && defaultSplit!.isNotEmpty;
@@ -399,6 +414,247 @@ class GroupBalances {
       if (b.userId == userId) return b.balance;
     }
     return 0.0;
+  }
+}
+
+/// The `category` value a budget uses to mean "all spending in the group".
+/// Matches the server's `ALL_CATEGORIES`.
+const String kAllCategoriesBudget = 'All';
+
+/// One monthly budget and how much of it has gone this month.
+class BudgetStatus {
+  final String category;
+  final double amount;
+  final double spent;
+  final double percent;
+
+  const BudgetStatus({
+    required this.category,
+    required this.amount,
+    required this.spent,
+    required this.percent,
+  });
+
+  factory BudgetStatus.fromJson(Map<String, dynamic> json) {
+    return BudgetStatus(
+      category: json['category'] ?? '',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      spent: (json['spent'] as num?)?.toDouble() ?? 0.0,
+      percent: (json['percent'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  bool get isOverall => category == kAllCategoriesBudget;
+
+  /// What to call it on screen.
+  String get label => isOverall ? 'All spending' : category;
+
+  double get remaining => amount - spent;
+
+  bool get isExceeded => percent >= 100;
+
+  /// Past the 80% line members are warned at.
+  bool get isNearLimit => percent >= 80;
+}
+
+/// Everything the budgets endpoint returns for one group.
+class GroupBudgets {
+  /// 'YYYY-MM' — the month these figures cover.
+  final String month;
+  final String currency;
+  final List<BudgetStatus> budgets;
+
+  /// This month's spend per category (plus [kAllCategoriesBudget] for the
+  /// total), including categories with no budget — handy when picking one.
+  final Map<String, double> spend;
+
+  const GroupBudgets({
+    required this.month,
+    required this.currency,
+    required this.budgets,
+    required this.spend,
+  });
+
+  const GroupBudgets.empty()
+      : month = '',
+        currency = 'INR',
+        budgets = const [],
+        spend = const {};
+
+  factory GroupBudgets.fromJson(Map<String, dynamic> json) {
+    final rawSpend = json['spend'];
+    return GroupBudgets(
+      month: json['month'] ?? '',
+      currency: json['currency'] ?? 'INR',
+      budgets: (json['budgets'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(BudgetStatus.fromJson)
+          .toList(),
+      spend: rawSpend is Map
+          ? {
+              for (final e in rawSpend.entries)
+                e.key.toString(): (e.value as num?)?.toDouble() ?? 0.0,
+            }
+          : const {},
+    );
+  }
+
+  bool get isEmpty => budgets.isEmpty;
+}
+
+/// The other side of a cross-group balance: who they are and how to pay them.
+class BalancePerson {
+  final String id;
+  final String name;
+  final String avatarUrl;
+  final String upiId;
+  final String paypalMe;
+
+  const BalancePerson({
+    required this.id,
+    required this.name,
+    this.avatarUrl = '',
+    this.upiId = '',
+    this.paypalMe = '',
+  });
+
+  factory BalancePerson.fromJson(Map<String, dynamic> json) {
+    return BalancePerson(
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
+      name: json['name'] ?? '',
+      avatarUrl: json['avatarUrl'] ?? '',
+      upiId: json['upiId'] ?? '',
+      paypalMe: json['paypalMe'] ?? '',
+    );
+  }
+}
+
+/// One group's contribution to a [PersonBalance]. Positive means they owe
+/// the signed-in user; negative means the user owes them.
+class PersonGroupDebt {
+  final String groupId;
+  final String groupName;
+  final String currency;
+  final double amount;
+
+  const PersonGroupDebt({
+    required this.groupId,
+    required this.groupName,
+    required this.currency,
+    required this.amount,
+  });
+
+  factory PersonGroupDebt.fromJson(Map<String, dynamic> json) {
+    return PersonGroupDebt(
+      groupId: (json['groupId'] ?? '').toString(),
+      groupName: json['groupName'] ?? '',
+      currency: json['currency'] ?? 'INR',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  String get currencySymbol => currencySymbolFor(currency);
+}
+
+/// Where the signed-in user stands with one person across every group they
+/// share, netted into a single figure.
+class PersonBalance {
+  final BalancePerson person;
+
+  /// In [NetBalances.currency]. Null when a group's currency could not be
+  /// converted — show [netByCurrency] instead.
+  final double? net;
+  final Map<String, double> netByCurrency;
+  final List<PersonGroupDebt> groups;
+
+  const PersonBalance({
+    required this.person,
+    required this.net,
+    required this.netByCurrency,
+    required this.groups,
+  });
+
+  factory PersonBalance.fromJson(Map<String, dynamic> json) {
+    final rawByCurrency = json['netByCurrency'];
+    return PersonBalance(
+      person: BalancePerson.fromJson(Map<String, dynamic>.from(json['user'] ?? {})),
+      net: (json['net'] as num?)?.toDouble(),
+      netByCurrency: rawByCurrency is Map
+          ? {
+              for (final e in rawByCurrency.entries)
+                e.key.toString(): (e.value as num?)?.toDouble() ?? 0.0,
+            }
+          : const {},
+      groups: (json['groups'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(PersonGroupDebt.fromJson)
+          .toList(),
+    );
+  }
+
+  /// Every group involved uses one currency, so the net can be settled in
+  /// one payment — the server refuses a cross-currency "settle all".
+  bool get isSingleCurrency => netByCurrency.length == 1;
+
+  /// The currency a single settling payment would be made in.
+  String? get settleCurrency =>
+      isSingleCurrency ? netByCurrency.keys.first : null;
+
+  /// The net in [settleCurrency], when there is exactly one.
+  double? get settleAmount =>
+      isSingleCurrency ? netByCurrency.values.first : null;
+
+  bool get theyOweYou => (net ?? settleAmount ?? 0) > 0;
+
+  bool get isSettled =>
+      netByCurrency.values.every((v) => v.abs() < 0.01);
+
+  /// More than one group is being netted together — the case this view
+  /// exists for.
+  bool get spansGroups => groups.length > 1;
+}
+
+/// The cross-group "who owes whom" for the signed-in user.
+class NetBalances {
+  final String currency;
+  final List<PersonBalance> people;
+  final double totalOwed;
+  final double totalOwe;
+
+  const NetBalances({
+    required this.currency,
+    required this.people,
+    required this.totalOwed,
+    required this.totalOwe,
+  });
+
+  const NetBalances.empty()
+      : currency = 'INR',
+        people = const [],
+        totalOwed = 0,
+        totalOwe = 0;
+
+  factory NetBalances.fromJson(Map<String, dynamic> json) {
+    final totals = Map<String, dynamic>.from(json['totals'] ?? {});
+    return NetBalances(
+      currency: json['currency'] ?? 'INR',
+      people: (json['people'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(PersonBalance.fromJson)
+          .where((p) => !p.isSettled)
+          .toList(),
+      totalOwed: (totals['owed'] as num?)?.toDouble() ?? 0.0,
+      totalOwe: (totals['owe'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  String get currencySymbol => currencySymbolFor(currency);
+
+  PersonBalance? forPerson(String userId) {
+    for (final p in people) {
+      if (p.person.id == userId) return p;
+    }
+    return null;
   }
 }
 

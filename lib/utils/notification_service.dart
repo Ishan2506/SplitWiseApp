@@ -8,6 +8,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../main.dart';
 import '../screen/expense_detail_screen.dart';
+import '../screen/groups/budgets_screen.dart';
 import '../screen/groups/group_detail_screen.dart';
 
 /// Push notifications: a phone subscribes itself to its own FCM topic,
@@ -163,6 +164,10 @@ class NotificationService {
       if (type == 'expense' && expenseId is String && expenseId.isNotEmpty) {
         navigator.push(MaterialPageRoute(
           builder: (_) => ExpenseDetailScreen(expenseId: expenseId, groupId: groupId),
+        ));
+      } else if (type == 'budget') {
+        navigator.push(MaterialPageRoute(
+          builder: (_) => BudgetsScreen(groupId: groupId),
         ));
       } else {
         navigator.push(MaterialPageRoute(

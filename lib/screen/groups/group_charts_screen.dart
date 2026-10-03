@@ -5,9 +5,12 @@ import '../../model/group_model.dart';
 import '../../models/models.dart';
 import '../../state/group_provider.dart';
 import '../../state/state_manager.dart';
+import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
+import '../../widgets/budget_bar.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/pie_chart_widget.dart';
+import 'budgets_screen.dart';
 
 /// A vivid, high-contrast palette just for charts — deliberately bolder than
 /// AppColors.avatarInk (that one is tuned for soft avatar backgrounds, which
@@ -40,14 +43,37 @@ Color _chartColorFor(String label) {
 /// separate endpoint — a group's spending history is exactly the same data
 /// [GroupDetailScreen]'s "Recent expenses" list uses, just added up
 /// differently.
-class GroupChartsScreen extends StatelessWidget {
+class GroupChartsScreen extends StatefulWidget {
   final String groupId;
 
   const GroupChartsScreen({super.key, required this.groupId});
 
   @override
+  State<GroupChartsScreen> createState() => _GroupChartsScreenState();
+}
+
+class _GroupChartsScreenState extends State<GroupChartsScreen> {
+  String get groupId => widget.groupId;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<GroupProvider>().loadBudgets(groupId);
+    });
+  }
+
+  void _openBudgets() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => BudgetsScreen(groupId: groupId)),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final group = context.watch<GroupProvider>().groupById(groupId);
+    final provider = context.watch<GroupProvider>();
+    final group = provider.groupById(groupId);
     final state = context.watch<StateManager>();
 
     if (group == null) {
@@ -64,6 +90,8 @@ class GroupChartsScreen extends StatelessWidget {
     final expenses =
         state.expenses.where((e) => e.groupId == groupId).toList();
     final symbol = group.currencySymbol;
+    final budgets = provider.budgetsFor(groupId);
+    final canEditBudgets = group.isCreatedBy(state.currentUserId);
 
     return Scaffold(
       appBar: AppBar(
@@ -93,6 +121,47 @@ class GroupChartsScreen extends StatelessWidget {
                         style: Theme.of(context).textTheme.displaySmall,
                       ),
                       const SizedBox(height: AppSpacing.xl),
+                      if (!budgets.isEmpty) ...[
+                        SectionHeader(
+                          title: 'Monthly budgets',
+                          subtitle: budgetMonthLabel(budgets.month),
+                          actionLabel: 'Manage',
+                          onAction: _openBudgets,
+                        ),
+                        PSCard(
+                          onTap: _openBudgets,
+                          child: BudgetBarList(
+                            budgets: [...budgets.budgets]
+                              ..sort((a, b) => b.percent.compareTo(a.percent)),
+                            currencySymbol: symbol,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                      ] else if (canEditBudgets) ...[
+                        PSCard(
+                          onTap: _openBudgets,
+                          child: const Row(
+                            children: [
+                              Icon(Icons.savings_outlined,
+                                  size: 20, color: AppColors.primaryAccent),
+                              SizedBox(width: AppSpacing.xs),
+                              Expanded(
+                                child: Text(
+                                  'Set a monthly budget and get alerted at 80%',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              Icon(Icons.chevron_right_rounded,
+                                  color: AppColors.textTertiary),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                      ],
                       const SectionHeader(title: 'By category'),
                       PSCard(
                         child: PSPieChart(

@@ -8,7 +8,9 @@ import '../../state/state_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/currencies.dart';
+import '../../utils/payment_links.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/payment_options.dart';
 
 /// Records a payment that clears part or all of a debt.
 ///
@@ -135,30 +137,29 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
       context.read<GroupProvider>().groupById(widget.groupId)?.currencySymbol ??
       currencySymbolFor(null);
 
-  Future<void> _save() async {
+  /// Why the current selection can't be recorded, or null when it can.
+  String? _validationError() {
     final outstanding = _outstandingBetween();
 
-    if (_toId == null || _fromId == null) {
-      showAppSnack(context, 'Choose who is being paid', success: false);
-      return;
-    }
+    if (_toId == null || _fromId == null) return 'Choose who is being paid';
     if (_fromId == _toId) {
-      showAppSnack(context, 'Payer and recipient cannot be the same person',
-          success: false);
-      return;
+      return 'Payer and recipient cannot be the same person';
     }
-    if (_amount <= 0) {
-      showAppSnack(context, 'Enter an amount greater than zero', success: false);
-      return;
-    }
+    if (_amount <= 0) return 'Enter an amount greater than zero';
     // Overpaying would flip the balance the other way, which is almost always
     // a typo rather than an intention.
     if (outstanding > 0 && _amount - outstanding > 0.01) {
-      showAppSnack(
-        context,
-        'That is more than the ${formatMoney(outstanding, symbol: _symbol)} outstanding',
-        success: false,
-      );
+      return 'That is more than the ${formatMoney(outstanding, symbol: _symbol)} outstanding';
+    }
+    return null;
+  }
+
+  /// Records the payment. [via] is set when the payer went through a UPI /
+  /// PayPal link and confirmed it; otherwise it is a manual record.
+  Future<void> _save({PaymentMethod? via}) async {
+    final problem = _validationError();
+    if (problem != null) {
+      showAppSnack(context, problem, success: false);
       return;
     }
 
@@ -174,7 +175,9 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
       fromUserId: _fromId!,
       toUserId: _toId!,
       amount: _amount,
-      note: _recordedAsCash ? 'Paid in cash, outside the app' : null,
+      note: via?.note ??
+          (_recordedAsCash ? PaymentMethod.cash.note : null),
+      method: (via ?? PaymentMethod.cash).wireValue,
     );
 
     if (!mounted) return;
@@ -214,6 +217,11 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
         .toList();
 
     final outstanding = _outstandingBetween();
+
+    // Paying through an app only makes sense for your own debt — you can't
+    // open someone else's UPI app on their behalf.
+    final recipient = _toId == null ? null : group?.memberById(_toId!);
+    final canPayInApp = recipient != null && _fromId == currentUserId;
 
     return Scaffold(
       appBar: AppBar(
@@ -300,7 +308,26 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
                   }),
                   onPartial: () => setState(() => _isFullAmount = false),
                 ),
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.lg),
+
+                if (canPayInApp) ...[
+                  const _Label('Pay now'),
+                  const SizedBox(height: AppSpacing.xs),
+                  PaymentOptions(
+                    payeeName: recipient.name,
+                    upiId: recipient.upiId,
+                    paypalMe: recipient.paypalMe,
+                    currency: group?.currency ?? 'INR',
+                    currencySymbol: symbol,
+                    amount: () => _amount,
+                    note: group == null ? null : 'PaisaSplit · ${group.name}',
+                    validate: _validationError,
+                    onPaid: (method) => _save(via: method),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  const _OrDivider(),
+                  const SizedBox(height: AppSpacing.md),
+                ],
 
                 _CashToggle(
                   value: _recordedAsCash,
@@ -310,6 +337,11 @@ class _SettleUpScreenState extends State<SettleUpScreen> {
 
                 PSButton(
                   label: 'Mark as settled',
+                  variant: canPayInApp &&
+                          (recipient.paypalMe.isNotEmpty ||
+                              recipient.upiId.isNotEmpty)
+                      ? PSButtonVariant.secondary
+                      : PSButtonVariant.primary,
                   onPressed: (_isSaving || _toId == null) ? null : _save,
                   isLoading: _isSaving,
                 ),
@@ -347,6 +379,32 @@ class _Label extends StatelessWidget {
         fontWeight: FontWeight.w600,
         color: AppColors.textTertiary,
       ),
+    );
+  }
+}
+
+/// Separates "pay through an app" from "I already paid, just record it".
+class _OrDivider extends StatelessWidget {
+  const _OrDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        Expanded(child: Divider(height: 1)),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+          child: Text(
+            'or record a payment already made',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.muted,
+            ),
+          ),
+        ),
+        Expanded(child: Divider(height: 1)),
+      ],
     );
   }
 }

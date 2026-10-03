@@ -25,6 +25,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _emailController;
   late final TextEditingController _phoneController;
+  late final TextEditingController _upiController;
+  late final TextEditingController _paypalController;
 
   bool _isSaving = false;
   bool _isUploadingPhoto = false;
@@ -33,6 +35,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final String _initialName;
   late final String _initialEmail;
   late final String _initialPhone;
+  late final String _initialUpi;
+  late final String _initialPaypal;
 
   @override
   void initState() {
@@ -42,10 +46,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _initialName = user?.name ?? '';
     _initialEmail = user?.email ?? '';
     _initialPhone = user?.mobileNumber ?? '';
+    _initialUpi = user?.upiId ?? '';
+    _initialPaypal = user?.paypalMe ?? '';
 
     _nameController = TextEditingController(text: _initialName);
     _emailController = TextEditingController(text: _initialEmail);
     _phoneController = TextEditingController(text: _initialPhone);
+    _upiController = TextEditingController(text: _initialUpi);
+    _paypalController = TextEditingController(text: _initialPaypal);
   }
 
   @override
@@ -53,13 +61,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _upiController.dispose();
+    _paypalController.dispose();
     super.dispose();
   }
 
   bool get _hasChanges =>
       _nameController.text.trim() != _initialName ||
       _emailController.text.trim() != _initialEmail ||
-      _phoneController.text.trim() != _initialPhone;
+      _phoneController.text.trim() != _initialPhone ||
+      _upiController.text.trim().toLowerCase() != _initialUpi ||
+      _paypalController.text.trim() != _initialPaypal;
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -73,6 +85,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final phone = _phoneController.text.trim();
+    final upi = _upiController.text.trim().toLowerCase();
+    final paypal = _paypalController.text.trim();
 
     // Sign-in needs one of the two, so refuse to leave the account with
     // neither. Checked here rather than per-field because either one alone
@@ -96,6 +110,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // still sends '', which is what removes it.
       email: email != _initialEmail ? email : null,
       mobileNumber: phone != _initialPhone ? phone : null,
+      upiId: upi != _initialUpi ? upi : null,
+      paypalMe: paypal != _initialPaypal ? paypal : null,
     );
 
     if (!mounted) return;
@@ -325,8 +341,52 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       return null;
                     },
                   ),
+                  const SizedBox(height: AppSpacing.xl),
+
+                  Text(
+                    'Get paid back',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Group members see these on Settle up, so paying you is '
+                    'one tap into their UPI or PayPal app.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                   const SizedBox(height: AppSpacing.md),
 
+                  PSTextField(
+                    label: 'UPI ID (optional)',
+                    placeholder: 'yourname@okaxis',
+                    controller: _upiController,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => setState(() {}),
+                    // Same shape the server accepts: handle@psp.
+                    validator: (val) {
+                      final v = (val ?? '').trim().toLowerCase();
+                      if (v.isEmpty) return null;
+                      if (!RegExp(r'^[a-z0-9._-]{2,256}@[a-z][a-z0-9.-]{1,64}$')
+                          .hasMatch(v)) {
+                        return 'Enter a valid UPI ID, e.g. name@okaxis';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+
+                  PSTextField(
+                    label: 'PayPal.me username (optional)',
+                    placeholder: 'yourname',
+                    prefixText: 'paypal.me/',
+                    controller: _paypalController,
+                    textInputAction: TextInputAction.done,
+                    maxLength: 20,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                    ],
+                    onChanged: (_) => setState(() {}),
+                  ),
                   const SizedBox(height: AppSpacing.md),
 
                   PSButton(

@@ -5,6 +5,11 @@ class UserModel {
   final String? mobileNumber;
   final String avatarUrl;
   final String preferredCurrency;
+
+  /// Where this user wants to be paid back — empty when not set. Shown to
+  /// fellow group members so Settle up can open a pre-filled payment.
+  final String upiId;
+  final String paypalMe;
   final String language;
   final bool emailNotifications;
   final bool pushNotifications;
@@ -18,6 +23,8 @@ class UserModel {
     this.mobileNumber,
     required this.avatarUrl,
     required this.preferredCurrency,
+    this.upiId = '',
+    this.paypalMe = '',
     required this.language,
     required this.emailNotifications,
     required this.pushNotifications,
@@ -33,6 +40,8 @@ class UserModel {
       mobileNumber: json['mobileNumber'],
       avatarUrl: json['avatarUrl'] ?? '',
       preferredCurrency: json['preferredCurrency'] ?? 'INR',
+      upiId: json['upiId'] ?? '',
+      paypalMe: json['paypalMe'] ?? '',
       language: json['language'] ?? 'en',
       emailNotifications: json['emailNotifications'] ?? true,
       // Off by default — matches the server's User.pushNotifications
@@ -53,6 +62,8 @@ class UserModel {
       'mobileNumber': mobileNumber,
       'avatarUrl': avatarUrl,
       'preferredCurrency': preferredCurrency,
+      'upiId': upiId,
+      'paypalMe': paypalMe,
       'language': language,
       'emailNotifications': emailNotifications,
       'pushNotifications': pushNotifications,

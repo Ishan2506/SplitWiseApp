@@ -75,5 +75,10 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Lets Settle up check for and open an installed UPI app. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>upi</string>
+	</array>
 </dict>
 </plist>
